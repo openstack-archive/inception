@@ -2,17 +2,18 @@
 
 ## Networks:
 
-# Management network: 10.250.0.x/24
-# Private network: 10.250.1.x/24
-# Public network: 10.250.2.x/24
+# eth0, management: inherent interface on each rVM
+# eth1, ops: 10.251.x.x/16
+# eth2, private: 10.252.x.x/16
+# eth3, public: 172.31.x.x/16
 
-## VMs:
+## rVMs (eth1, ops interface)
 
-# [prefix]-gateway, 10.250.0.1
-# [prefix]-chefserver, 10.250.0.2
-# [prefix]-controller(s), 10.250.0.3 [ ~ 10.250.0.100]
-# [prefix]-worker-1, 10.250.0.100
-# [prefix]-worker-2, 10.250.0.100 [~10.250.0.254]
+# [prefix]-gateway, 10.251.0.1
+# [prefix]-chefserver, 10.251.0.2
+# [prefix]-controller(s), 10.251.0.3 [ - 10.251.0.255] # maximum 253
+# [prefix]-worker-1, 10.251.1.1
+# [prefix]-worker-2(s), 10.251.1.2 [ - 10.251.255.254] # maximum ~65000
 
 ## Steps:
 
