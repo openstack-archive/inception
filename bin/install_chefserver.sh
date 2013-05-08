@@ -16,7 +16,7 @@ sudo apt-get install -y opscode-keyring # permanent upgradeable keyring
 sudo apt-get install -y debconf-utils
 sudo apt-get -y upgrade
 
-cat | sudo debconf-set-selections << EOF
+cat > /tmp/chef_seed << EOF
 # New password for the 'admin' user in the Chef Server WebUI:
 chef-server-webui chef-server-webui/admin_password password ${CHEF_PASSWORD}
 # New password for the 'chef' AMQP user in the RabbitMQ vhost "/chef":
@@ -24,6 +24,9 @@ chef-solr chef-solr/amqp_password password ${CHEF_PASSWORD}
 # URL of Chef Server (e.g., http://chef.example.com:4000):
 chef chef/chef_server_url string http://${CHEF_SERVER}:4000
 EOF
+
+sudo debconf-set-selections < /tmp/chef_seed
+rm -rf /tmp/chef_seed
 
 sudo apt-get -y install chef chef-server chef-server-api chef-expander
 
