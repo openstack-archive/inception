@@ -17,4 +17,3 @@ cd ~/chef-repo
 knife cookbook upload -a
 knife environment from file environments/*.json
 knife role from file roles/*.json
-
