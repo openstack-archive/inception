@@ -4,11 +4,13 @@
 CHEF_SERVER=$(hostname)
 CHEF_PASSWORD=${CHEF_PASSWORD:-ChefServer}
 
-echo "deb http://apt.opscode.com/ `lsb_release -cs`-0.10 main" | sudo tee /etc/apt/sources.list.d/opscode.list
+echo "deb http://apt.opscode.com/ `lsb_release -cs`-0.10 main" | \
+	sudo tee /etc/apt/sources.list.d/opscode.list
 
 sudo mkdir -p /etc/apt/trusted.gpg.d
 gpg --keyserver keys.gnupg.net --recv-keys 83EF826A
-gpg --export packages@opscode.com | sudo tee /etc/apt/trusted.gpg.d/opscode-keyring.gpg > /dev/null
+gpg --export packages@opscode.com | \
+	sudo tee /etc/apt/trusted.gpg.d/opscode-keyring.gpg > /dev/null
 
 sudo apt-get update
 
@@ -29,4 +31,3 @@ sudo debconf-set-selections < /tmp/chef_seed
 rm -rf /tmp/chef_seed
 
 sudo apt-get -y install chef chef-server chef-server-api chef-expander
-
