@@ -4,28 +4,33 @@
 import subprocess
 
 
-def local(cmd):
+def local(cmd, output_to_screen=False):
     """
     Execute a local command
 
     @param cmd: a str, e.g., 'uname -a'
     """
     print 'executing command=', cmd
-    proc = subprocess.Popen(cmd,
-                            shell=True,
-                            stdin=None,
-                            stderr=subprocess.PIPE,
-                            stdout=subprocess.PIPE)
-    out, error = proc.communicate()  # 0: stdout, 1:stderr
-    return out.rstrip('\n'), error  # remove trailing '\n'
+    if output_to_screen:
+        out = subprocess.check_call([e for e in cmd.split(' ') if e])
+        return (str(out), "")
+    else:
+        proc = subprocess.Popen(cmd,
+                                shell=True,
+                                stdin=None,
+                                stderr=subprocess.PIPE,
+                                stdout=subprocess.PIPE)
+        out, error = proc.communicate()  # 0: stdout, 1:stderr
+        return out.rstrip('\n'), error  # remove trailing '\n'
 
 
-def ssh(uri, cmd, silent=True, output_to_screen=False):
+def ssh(uri, cmd, output_to_screen=False, silent=True):
     """
     Execute a remote command via ssh
 
     @param uri: <user>@<ipaddr/hostname>[:port]
     @param cmd: a str, e.g., 'uname -a'
+    @param output_to_screen: whether output to screen or capture the output
     @param silent: whether prompt for yes/no questions
     """
     ## if ssh port forwarding address, find out the port
@@ -40,7 +45,7 @@ def ssh(uri, cmd, silent=True, output_to_screen=False):
     print 'executing command=', cmd
     if output_to_screen:
         out = subprocess.check_call([e for e in cmd.split(' ') if e])
-        return (out, None)
+        return (str(out), "")
     else:
         proc = subprocess.Popen(cmd,
                                 shell=True,
