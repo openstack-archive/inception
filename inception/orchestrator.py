@@ -70,9 +70,12 @@ class Orchestrator(object):
         @param flavor: default medium
         @param key_name: ssh public key to be injected
         @param security_groups:
-        @param src_dir: location from where scripts are uploaded to servers
-        @param dst_dir: target location of scripts on servers
-        @param chefserver_filenames: scripts to run on chefserver
+        @param src_dir: location from where scripts are uploaded to servers.
+            Relative path to __file__
+        @param dst_dir: target location of scripts on servers. Must be absolte
+            path
+        @param chefserver_filenames: scripts to run on chefserver. Scripts will
+            be executed one by one, so sequence matters
         @param timeout: sleep time (s) for servers to be launched
         """
         ## args
@@ -83,8 +86,9 @@ class Orchestrator(object):
         self.flavor = flavor
         self.key_name = key_name
         self.security_groups = security_groups
-        self.src_dir = src_dir
-        self.dst_dir = dst_dir
+        self.src_dir = os.path.join(os.path.abspath(os.path.dirname(__file__)),
+                                                    src_dir)
+        self.dst_dir = os.path.abspath(dst_dir)
         self.chefserver_files = OrderedDict()
         for filename in chefserver_filenames:
             fin = open(os.path.join(self.src_dir, filename), 'r')
@@ -98,10 +102,10 @@ class Orchestrator(object):
                              os.environ['OS_PASSWORD'],
                              os.environ['OS_TENANT_NAME'],
                              os.environ['OS_AUTH_URL'])
-        self.chefserver = None
-        self.gateway = None
-        self.controller = None
-        self.workers = []
+        self._chefserver_id = None
+        self._gateway_id = None
+        self._controller_id = None
+        self._worker_ids = []
 
     def start(self):
         """
@@ -117,7 +121,7 @@ class Orchestrator(object):
             print "Your inception cloud is ready!!!"
         except Exception:
             print traceback.format_exc()
-            self._cleanup()
+            self.cleanup()
 
     def _create_servers(self):
         """
@@ -125,35 +129,37 @@ class Orchestrator(object):
         calling Nova client API
         """
         # launch chefserver
-        self.chefserver = self.client.servers.create(
+        chefserver = self.client.servers.create(
             name=self.prefix + '-chefserver',
             image=self.image,
             flavor=self.flavor,
             key_name=self.key_name,
             security_groups=self.security_groups,
             files=self.chefserver_files)
-        print "%s is being created" % self.chefserver.name
+        self._chefserver_id = chefserver.id
+        print "%s is being created" % chefserver.name
 
         # launch gateway
-        self.gateway = self.client.servers.create(
+        gateway = self.client.servers.create(
             name=self.prefix + '-gateway',
             image=self.image,
             flavor=self.flavor,
             key_name=self.key_name,
             security_groups=self.security_groups)
-        print "%s is being created" % self.gateway.name
+        self._gateway_id = gateway.id
+        print "%s is being created" % gateway.name
 
         # launch controller
-        self.controller = self.client.servers.create(
+        controller = self.client.servers.create(
             name=self.prefix + '-controller',
             image=self.image,
             flavor=self.flavor,
             key_name=self.key_name,
             security_groups=self.security_groups)
-        print "%s is being created" % self.controller.name
+        self._controller_id = controller.id
+        print "%s is being created" % controller.name
 
         # launch workers
-        self.workers = []
         for i in xrange(self.num_workers):
             worker = self.client.servers.create(
                 name=self.prefix + '-worker%s' % (i + 1),
@@ -161,7 +167,7 @@ class Orchestrator(object):
                 flavor=self.flavor,
                 key_name=self.key_name,
                 security_groups=self.security_groups)
-            self.workers.append(worker)
+            self._worker_ids.append(worker.id)
             print 'name %s is being created' % worker.name
 
         print 'sleep %s seconds to wait for servers to be ready' % self.timeout
@@ -172,12 +178,12 @@ class Orchestrator(object):
         execute uploaded scripts to install chef, config knife, upload
         cookbooks, roles, and environments
         """
-        self.chefserver = self.client.servers.get(self.chefserver.id)
-        if self.chefserver.status != 'ACTIVE':
-            raise RuntimeError('%s can not be launched' % self.chefserver.name)
+        chefserver = self.client.servers.get(self._chefserver_id)
+        if chefserver.status != 'ACTIVE':
+            raise RuntimeError('%s can not be launched' % chefserver.name)
         # get ipaddress (there is only 1 item in the dict)
-        for network in self.chefserver.networks:
-            ipaddress = self.chefserver.networks[network][0]
+        for network in chefserver.networks:
+            ipaddress = chefserver.networks[network][0]
         # execute scripts via ssh command
         out, error = cmd.ssh(self.user + '@' + ipaddress,
                              'sudo /bin/umount /mnt')
@@ -210,41 +216,53 @@ class Orchestrator(object):
         multi-threading or multi-processing)
         """
 
-    def _cleanup(self):
+    def cleanup(self):
         """
         blow up the whole inception cloud
         """
-        for server in self.client.servers:
-            server.delete()
-            print '%s is being deleted' % server.name
+        print "blow up the whole inception cloud..."
+        ids = ([self._chefserver_id, self._gateway_id, self._controller_id] +
+               self._worker_ids)
+        for i in ids:
+            try:
+                server = self.client.servers.get(i)
+                server.delete()
+                print '%s is being deleted' % server.name
+            except Exception:
+                print traceback.format_exc()
+                continue
 
 
 def main():
     """
     program starting point
     """
+    shell = True
     try:
-        optlist, _ = getopt.getopt(sys.argv[1:], 'p:n:', [])
+        optlist, _ = getopt.getopt(sys.argv[1:], 'p:n:', ["noshell"])
         optdict = dict(optlist)
         prefix = optdict['-p']
         if '-' in prefix:
             raise RuntimeError('"-" can not exist in prefix')
         num_workers = int(optdict['-n'])
+        if "--noshell" in optdict:
+            shell = False
     except Exception:
         print traceback.format_exc()
         usage()
         sys.exit(1)
     orchestrator = Orchestrator(prefix, num_workers)
     orchestrator.start()
-    # give me a ipython shell when everything is done
-    IPython.embed()
+    # give me a ipython shell after inception cloud is launched
+    if shell:
+        IPython.embed()
 
 
 def usage():
     print """
     (make sure OpenStack-related environment variables are defined)
 
-    python %s -p <prefix> -n <num_workers>
+    python %s -p <prefix> -n <num_workers> [--noshell]
     """ % (__file__,)
 
 ##############################################
