@@ -59,10 +59,12 @@ class Orchestrator(object):
                  security_groups=('default', 'ssh'),
                  src_dir='../bin/',
                  dst_dir='/home/ubuntu/',
-                 chefserver_filenames=('install_chefserver.sh',
-                                       'configure_knife.sh',
-                                       'setup_chef_repo.sh'),
-                 timeout=60):
+                 userdata='userdata.sh',
+                 chefserver_files=('install_chefserver.sh',
+                                   'configure_knife.sh',
+                                   'setup_chef_repo.sh'),
+                 timeout=45,
+                 poll_interval=5):
         """
         @param prefix: unique name as prefix
         @param num_workers: how many worker nodes you'd like
@@ -74,9 +76,13 @@ class Orchestrator(object):
             Relative path to __file__
         @param dst_dir: target location of scripts on servers. Must be absolte
             path
-        @param chefserver_filenames: scripts to run on chefserver. Scripts will
+        @param userdata: a bash script to be executed by cloud-init (in late
+            booting stage, rc.local-like)
+        @param chefserver_files: scripts to run on chefserver. Scripts will
             be executed one by one, so sequence matters
         @param timeout: sleep time (s) for servers to be launched
+        @param poll_interval: every this time poll to check whether a server
+            has finished launching, i.e., ssh-able
         """
         ## args
         self.prefix = prefix
@@ -86,30 +92,39 @@ class Orchestrator(object):
         self.flavor = flavor
         self.key_name = key_name
         self.security_groups = security_groups
-        self.src_dir = os.path.join(os.path.abspath(os.path.dirname(__file__)),
-                                                    src_dir)
+        self.src_dir = os.path.join(os.path.abspath(
+            os.path.dirname(__file__)), src_dir)
         self.dst_dir = os.path.abspath(dst_dir)
+        with open(os.path.join(self.src_dir, userdata), 'r') as fin:
+            self.userdata = fin.read()
         self.chefserver_files = OrderedDict()
-        for filename in chefserver_filenames:
-            fin = open(os.path.join(self.src_dir, filename), 'r')
-            value = fin.read()
-            key = os.path.join(self.dst_dir, filename)
-            self.chefserver_files[key] = value
-            fin.close()
+        for filename in chefserver_files:
+            with open(os.path.join(self.src_dir, filename), 'r') as fin:
+                value = fin.read()
+                key = os.path.join(self.dst_dir, filename)
+                self.chefserver_files[key] = value
         self.timeout = timeout
+        self.poll_interval = poll_interval
         ## entities
         self.client = Client(os.environ['OS_USERNAME'],
                              os.environ['OS_PASSWORD'],
                              os.environ['OS_TENANT_NAME'],
                              os.environ['OS_AUTH_URL'])
         self._chefserver_id = None
+        self._chefserver_ip = None
         self._gateway_id = None
+        self._gateway_ip = None
         self._controller_id = None
+        self._controller_ip = None
         self._worker_ids = []
+        self._worker_ips = []
 
-    def start(self):
+    def start(self, atomic):
         """
         run the whole process
+
+        @param atomic: upon exception, whether rollback, i.e., auto delete all
+            created servers
         """
         try:
             self._create_servers()
@@ -121,7 +136,8 @@ class Orchestrator(object):
             print "Your inception cloud is ready!!!"
         except Exception:
             print traceback.format_exc()
-            self.cleanup()
+            if atomic:
+                self.cleanup()
 
     def _create_servers(self):
         """
@@ -135,6 +151,7 @@ class Orchestrator(object):
             flavor=self.flavor,
             key_name=self.key_name,
             security_groups=self.security_groups,
+            userdata=self.userdata,
             files=self.chefserver_files)
         self._chefserver_id = chefserver.id
         print "%s is being created" % chefserver.name
@@ -145,7 +162,8 @@ class Orchestrator(object):
             image=self.image,
             flavor=self.flavor,
             key_name=self.key_name,
-            security_groups=self.security_groups)
+            security_groups=self.security_groups,
+            userdata=self.userdata)
         self._gateway_id = gateway.id
         print "%s is being created" % gateway.name
 
@@ -155,7 +173,8 @@ class Orchestrator(object):
             image=self.image,
             flavor=self.flavor,
             key_name=self.key_name,
-            security_groups=self.security_groups)
+            security_groups=self.security_groups,
+            userdata=self.userdata)
         self._controller_id = controller.id
         print "%s is being created" % controller.name
 
@@ -166,38 +185,58 @@ class Orchestrator(object):
                 image=self.image,
                 flavor=self.flavor,
                 key_name=self.key_name,
-                security_groups=self.security_groups)
+                security_groups=self.security_groups,
+                userdata=self.userdata)
             self._worker_ids.append(worker.id)
             print 'name %s is being created' % worker.name
 
+        # TODO: poll to test whether ssh-able
+        #if chefserver.status != 'ACTIVE':
+        #    raise RuntimeError('%s can not be launched' % chefserver.name)
         print 'sleep %s seconds to wait for servers to be ready' % self.timeout
         time.sleep(self.timeout)
+
+        # get IP addr of servers
+        self._chefserver_ip = self._get_server_ip(self._chefserver_id)
+        self._gateway_ip = self._get_server_ip(self._gateway_id)
+        self._controller_ip = self._get_server_ip(self._controller_id)
+        self._worker_ips = [self._get_server_ip(_id)
+                            for _id in self._worker_ids]
+
+    def _get_server_ip(self, _id):
+        """
+        get server IP from server ID
+        """
+        server = self.client.servers.get(_id)
+        # get ipaddress (there is only 1 item in the dict)
+        for network in server.networks:
+            ipaddress = server.networks[network][0]
+        return ipaddress
 
     def _setup_chefserver(self):
         """
         execute uploaded scripts to install chef, config knife, upload
         cookbooks, roles, and environments
         """
-        chefserver = self.client.servers.get(self._chefserver_id)
-        if chefserver.status != 'ACTIVE':
-            raise RuntimeError('%s can not be launched' % chefserver.name)
-        # get ipaddress (there is only 1 item in the dict)
-        for network in chefserver.networks:
-            ipaddress = chefserver.networks[network][0]
-        # execute scripts via ssh command
-        out, error = cmd.ssh(self.user + '@' + ipaddress,
-                             'sudo /bin/umount /mnt')
-        print 'out=', out, 'error=', error
         for key in self.chefserver_files:
-            out, error = cmd.ssh(self.user + '@' + ipaddress,
+            out, error = cmd.ssh(self.user + '@' + self._chefserver_ip,
                                  '/bin/bash ' + key,
-                                 output_to_screen=True)
+                                 screen_output=True)
             print 'out=', out, 'error=', error
 
     def _checkin_chefserver(self):
         """
-        check-in all other VMs into chefserver (knife bootstrap), via eth0
+        check-in all VMs into chefserver (knife bootstrap), via eth0
         """
+        #FIXME: can not check in myself (chefserver), causing problem
+        ips = ([self._gateway_ip, self._controller_ip] + self._worker_ips)
+        for ip in ips:
+            out, error = cmd.ssh(
+                self.user + '@' + self._chefserver_ip,
+                '/usr/bin/knife bootstrap %s -x %s --sudo' % (ip, self.user),
+                screen_output=True,
+                agent_forwarding=True)
+            print 'out=', out, 'error=', error
 
     def _deploy_vxlan_network(self):
         """
@@ -223,9 +262,9 @@ class Orchestrator(object):
         print "blow up the whole inception cloud..."
         ids = ([self._chefserver_id, self._gateway_id, self._controller_id] +
                self._worker_ids)
-        for i in ids:
+        for _id in ids:
             try:
-                server = self.client.servers.get(i)
+                server = self.client.servers.get(_id)
                 server.delete()
                 print '%s is being deleted' % server.name
             except Exception:
@@ -237,22 +276,25 @@ def main():
     """
     program starting point
     """
-    shell = True
+    shell = False
+    atomic = False
     try:
-        optlist, _ = getopt.getopt(sys.argv[1:], 'p:n:', ["noshell"])
+        optlist, _ = getopt.getopt(sys.argv[1:], 'p:n:', ["shell", "atomic"])
         optdict = dict(optlist)
         prefix = optdict['-p']
         if '-' in prefix:
             raise RuntimeError('"-" can not exist in prefix')
         num_workers = int(optdict['-n'])
-        if "--noshell" in optdict:
-            shell = False
+        if "--shell" in optdict:
+            shell = True
+        if "--atomic" in optdict:
+            atomic = True
     except Exception:
         print traceback.format_exc()
         usage()
         sys.exit(1)
     orchestrator = Orchestrator(prefix, num_workers)
-    orchestrator.start()
+    orchestrator.start(atomic)
     # give me a ipython shell after inception cloud is launched
     if shell:
         IPython.embed()
@@ -262,7 +304,7 @@ def usage():
     print """
     (make sure OpenStack-related environment variables are defined)
 
-    python %s -p <prefix> -n <num_workers> [--noshell]
+    python %s -p <prefix> -n <num_workers> [--shell] [--atomic]
     """ % (__file__,)
 
 ##############################################
