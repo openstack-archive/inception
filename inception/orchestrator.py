@@ -119,11 +119,11 @@ class Orchestrator(object):
         self._worker_ids = []
         self._worker_ips = []
 
-    def start(self, txnal):
+    def start(self, atomic):
         """
         run the whole process
 
-        @param txnal: upon exception, whether rollback, i.e., auto delete all
+        @param atomic: upon exception, whether rollback, i.e., auto delete all
             created servers
         """
         try:
@@ -136,7 +136,7 @@ class Orchestrator(object):
             print "Your inception cloud is ready!!!"
         except Exception:
             print traceback.format_exc()
-            if txnal:
+            if atomic:
                 self.cleanup()
 
     def _create_servers(self):
@@ -277,9 +277,9 @@ def main():
     program starting point
     """
     shell = False
-    txnal = False
+    atomic = False
     try:
-        optlist, _ = getopt.getopt(sys.argv[1:], 'p:n:', ["shell", "txnal"])
+        optlist, _ = getopt.getopt(sys.argv[1:], 'p:n:', ["shell", "atomic"])
         optdict = dict(optlist)
         prefix = optdict['-p']
         if '-' in prefix:
@@ -287,14 +287,14 @@ def main():
         num_workers = int(optdict['-n'])
         if "--shell" in optdict:
             shell = True
-        if "--txnal" in optdict:
-            txnal = True
+        if "--atomic" in optdict:
+            atomic = True
     except Exception:
         print traceback.format_exc()
         usage()
         sys.exit(1)
     orchestrator = Orchestrator(prefix, num_workers)
-    orchestrator.start(txnal)
+    orchestrator.start(atomic)
     # give me a ipython shell after inception cloud is launched
     if shell:
         IPython.embed()
@@ -304,7 +304,7 @@ def usage():
     print """
     (make sure OpenStack-related environment variables are defined)
 
-    python %s -p <prefix> -n <num_workers> [--shell] [--txnal]
+    python %s -p <prefix> -n <num_workers> [--shell] [--atomic]
     """ % (__file__,)
 
 ##############################################
