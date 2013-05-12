@@ -4,14 +4,14 @@
 import subprocess
 
 
-def local(cmd, output_to_screen=False):
+def local(cmd, screen_output=False):
     """
     Execute a local command
 
     @param cmd: a str, e.g., 'uname -a'
     """
     print 'executing command=', cmd
-    if output_to_screen:
+    if screen_output:
         out = subprocess.check_call([e for e in cmd.split(' ') if e])
         return (str(out), "")
     else:
@@ -24,13 +24,13 @@ def local(cmd, output_to_screen=False):
         return out.rstrip('\n'), error  # remove trailing '\n'
 
 
-def ssh(uri, cmd, output_to_screen=False, silent=True):
+def ssh(uri, cmd, screen_output=False, silent=True, agent_forwarding=False):
     """
     Execute a remote command via ssh
 
     @param uri: <user>@<ipaddr/hostname>[:port]
     @param cmd: a str, e.g., 'uname -a'
-    @param output_to_screen: whether output to screen or capture the output
+    @param screen_output: whether output to screen or capture the output
     @param silent: whether prompt for yes/no questions
     """
     ## if ssh port forwarding address, find out the port
@@ -39,11 +39,14 @@ def ssh(uri, cmd, output_to_screen=False, silent=True):
     ## default port
     else:
         port = 22
-    flag = ('-T -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
-            if silent else '-T')
+    flag = '-T'
+    if silent:
+        flag += ' -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+    if agent_forwarding:
+        flag += ' -A'
     cmd = 'ssh -p %s %s %s %s' % (port, flag, uri, cmd)
     print 'executing command=', cmd
-    if output_to_screen:
+    if screen_output:
         out = subprocess.check_call([e for e in cmd.split(' ') if e])
         return (str(out), "")
     else:
