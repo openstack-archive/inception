@@ -1,7 +1,5 @@
 #!/usr/bin/env python
 """
-TODOs
-
 - Networks:
 
 eth0, management: inherent interface on each rVM
@@ -63,11 +61,12 @@ class Orchestrator(object):
                  chefserver_files=('install_chefserver.sh',
                                    'configure_knife.sh',
                                    'setup_chef_repo.sh'),
-                 timeout=45,
+                 timeout=60,
                  poll_interval=5):
         """
         @param prefix: unique name as prefix
         @param num_workers: how many worker nodes you'd like
+        @param user: username (with root permission) for all servers
         @param image: default u1204-130508-gv
         @param flavor: default medium
         @param key_name: ssh public key to be injected
@@ -105,19 +104,20 @@ class Orchestrator(object):
                 self.chefserver_files[key] = value
         self.timeout = timeout
         self.poll_interval = poll_interval
-        ## entities
+        ## non-args
         self.client = Client(os.environ['OS_USERNAME'],
                              os.environ['OS_PASSWORD'],
                              os.environ['OS_TENANT_NAME'],
                              os.environ['OS_AUTH_URL'])
-        self._chefserver_id = None
-        self._chefserver_ip = None
         self._gateway_id = None
         self._gateway_ip = None
+        self._chefserver_id = None
+        self._chefserver_ip = None
         self._controller_id = None
         self._controller_ip = None
         self._worker_ids = []
         self._worker_ips = []
+        self._gateway_floating_ip = None
 
     def start(self, atomic):
         """
@@ -131,9 +131,10 @@ class Orchestrator(object):
             self._setup_chefserver()
             self._checkin_chefserver()
             self._deploy_vxlan_network()
-            self._deploy_controller()
-            self._deploy_workers()
-            print "Your inception cloud is ready!!!"
+            self._setup_controller()
+            self._setup_workers()
+            print ("Your inception cloud is ready!!! gateway IP=%s" %
+                   self._gateway_floating_ip)
         except Exception:
             print traceback.format_exc()
             if atomic:
@@ -141,9 +142,20 @@ class Orchestrator(object):
 
     def _create_servers(self):
         """
-        start all VM servers: chefserver, gateway, controller, and workers, via
+        start all VM servers: gateway, chefserver, controller, and workers, via
         calling Nova client API
         """
+        # launch gateway
+        gateway = self.client.servers.create(
+            name=self.prefix + '-gateway',
+            image=self.image,
+            flavor=self.flavor,
+            key_name=self.key_name,
+            security_groups=self.security_groups,
+            userdata=self.userdata)
+        self._gateway_id = gateway.id
+        print "%s is being created" % gateway.name
+
         # launch chefserver
         chefserver = self.client.servers.create(
             name=self.prefix + '-chefserver',
@@ -155,17 +167,6 @@ class Orchestrator(object):
             files=self.chefserver_files)
         self._chefserver_id = chefserver.id
         print "%s is being created" % chefserver.name
-
-        # launch gateway
-        gateway = self.client.servers.create(
-            name=self.prefix + '-gateway',
-            image=self.image,
-            flavor=self.flavor,
-            key_name=self.key_name,
-            security_groups=self.security_groups,
-            userdata=self.userdata)
-        self._gateway_id = gateway.id
-        print "%s is being created" % gateway.name
 
         # launch controller
         controller = self.client.servers.create(
@@ -190,22 +191,45 @@ class Orchestrator(object):
             self._worker_ids.append(worker.id)
             print 'name %s is being created' % worker.name
 
-        # TODO: poll to test whether ssh-able
-        #if chefserver.status != 'ACTIVE':
-        #    raise RuntimeError('%s can not be launched' % chefserver.name)
-        print 'sleep %s seconds to wait for servers to be ready' % self.timeout
-        time.sleep(self.timeout)
+        print ('wait at most %s seconds for servers to be ready (ssh-able)' %
+               self.timeout)
+        servers_ready = False
+        begin_time = time.time()
+        while time.time() - begin_time <= self.timeout:
+            try:
+                # get IP addr of servers
+                self._gateway_ip = self._get_server_ip(self._gateway_id)
+                self._chefserver_ip = self._get_server_ip(self._chefserver_id)
+                self._controller_ip = self._get_server_ip(self._controller_id)
+                self._worker_ips = [self._get_server_ip(_id)
+                                    for _id in self._worker_ids]
+                # test ssh-able
+                cmd.ssh(self._gateway_ip, 'uname -a')
+                cmd.ssh(self._chefserver_ip, 'uname -a')
+                cmd.ssh(self._controller_ip, 'uname -a')
+                for worker_ip in self._worker_ips:
+                    cmd.ssh(worker_ip, 'uname -a')
+                # indicate that servers are ready
+                servers_ready = True
+                break
+            except Exception:
+                print ('servers are not all ready, sleep %s seconds' %
+                       self.poll_interval)
+                time.sleep(self.poll_interval)
+                continue
+        if not servers_ready:
+            raise RuntimeError("No all servers can be brought up")
 
-        # get IP addr of servers
-        self._chefserver_ip = self._get_server_ip(self._chefserver_id)
-        self._gateway_ip = self._get_server_ip(self._gateway_id)
-        self._controller_ip = self._get_server_ip(self._controller_id)
-        self._worker_ips = [self._get_server_ip(_id)
-                            for _id in self._worker_ids]
+        # create a public IP and associate it to gateway
+        floating_ip = self.client.floating_ips.create()
+        self.client.servers.add_floating_ip(self._gateway_id, floating_ip)
+        self._gateway_floating_ip = floating_ip
 
     def _get_server_ip(self, _id):
         """
         get server IP from server ID
+
+        @param _id: server ID
         """
         server = self.client.servers.get(_id)
         # get ipaddress (there is only 1 item in the dict)
@@ -228,8 +252,8 @@ class Orchestrator(object):
         """
         check-in all VMs into chefserver (knife bootstrap), via eth0
         """
-        #FIXME: can not check in myself (chefserver), causing problem
-        ips = ([self._gateway_ip, self._controller_ip] + self._worker_ips)
+        ips = ([self._chefserver_ip, self._gateway_ip, self._controller_ip]
+               + self._worker_ips)
         for ip in ips:
             out, error = cmd.ssh(
                 self.user + '@' + self._chefserver_ip,
@@ -244,12 +268,12 @@ class Orchestrator(object):
         VXLAN tunnels with gateway as layer-2 hub and other VMs as spokes
         """
 
-    def _deploy_controller(self):
+    def _setup_controller(self):
         """
         deploy OpenStack controller(s) via misc cookbooks
         """
 
-    def _deploy_workers(self):
+    def _setup_workers(self):
         """
         deploy workers via misc cookbooks (parallelization via Python
         multi-threading or multi-processing)
@@ -259,7 +283,15 @@ class Orchestrator(object):
         """
         blow up the whole inception cloud
         """
-        print "blow up the whole inception cloud..."
+        print "Let's blow up the whole inception cloud..."
+        try:
+            print ("floating ip %s is being released and deleted" %
+                   self._gateway_floating_ip)
+            self.client.servers.remove_floating_ip(self._gateway_id,
+                                                   self._gateway_floating_ip)
+            self.client.floating_ips.delete(self._gateway_floating_ip)
+        except Exception:
+            pass
         ids = ([self._chefserver_id, self._gateway_id, self._controller_id] +
                self._worker_ids)
         for _id in ids:
