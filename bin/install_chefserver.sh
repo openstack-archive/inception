@@ -1,7 +1,7 @@
 #!/bin/bash
 # install chef server from opscode repo via apt
 
-CHEF_SERVER=$(hostname)
+CHEF_SERVER=$(hostname -i)
 CHEF_PASSWORD=${CHEF_PASSWORD:-ChefServer}
 
 echo "deb http://apt.opscode.com/ `lsb_release -cs`-0.10 main" | \
