@@ -315,7 +315,7 @@ def main():
         optdict = dict(optlist)
         prefix = optdict['-p']
         if '-' in prefix:
-            raise RuntimeError('"-" can not exist in prefix')
+            raise ValueError('"-" cannot exist in prefix=%r' % prefix)
         num_workers = int(optdict['-n'])
         if "--shell" in optdict:
             shell = True
