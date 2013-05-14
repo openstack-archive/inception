@@ -24,6 +24,11 @@ def local(cmd, screen_output=False):
         return out.rstrip('\n'), error  # remove trailing '\n'
 
 
+class SshConnectionError(Exception):
+    """connection error in ssh"""
+    pass
+
+
 def ssh(uri, cmd, screen_output=False, silent=True, agent_forwarding=False):
     """
     Execute a remote command via ssh
@@ -60,5 +65,5 @@ def ssh(uri, cmd, screen_output=False, silent=True, agent_forwarding=False):
                                     "Connection timed out",
                                     "Connection refused",
                                     "Connection closed by remote host"]):
-            raise RuntimeError('host can not be reached via ssh')
+            raise SshConnectionError('host can not be reached via ssh')
         return out.rstrip('\n'), error  # remove trailing '\n'

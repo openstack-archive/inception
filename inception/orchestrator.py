@@ -212,9 +212,9 @@ class Orchestrator(object):
                 # indicate that servers are ready
                 servers_ready = True
                 break
-            except Exception:
-                print ('servers are not all ready, sleep %s seconds' %
-                       self.poll_interval)
+            except (cmd.SshConnectionError, UnboundLocalError) as error:
+                print ('servers are not all ready, error=%s, sleep %s seconds'
+                       % (error, self.poll_interval))
                 time.sleep(self.poll_interval)
                 continue
         if not servers_ready:
@@ -291,7 +291,7 @@ class Orchestrator(object):
                                                    self._gateway_floating_ip)
             self.client.floating_ips.delete(self._gateway_floating_ip)
         except Exception:
-            pass
+            print traceback.format_exc()
         ids = ([self._chefserver_id, self._gateway_id, self._controller_id] +
                self._worker_ids)
         for _id in ids:
