@@ -204,11 +204,11 @@ class Orchestrator(object):
                 self._worker_ips = [self._get_server_ip(_id)
                                     for _id in self._worker_ids]
                 # test ssh-able
-                cmd.ssh(self._gateway_ip, 'uname -a')
-                cmd.ssh(self._chefserver_ip, 'uname -a')
-                cmd.ssh(self._controller_ip, 'uname -a')
+                cmd.ssh(self.user + "@" + self._gateway_ip, 'uname -a')
+                cmd.ssh(self.user + "@" + self._chefserver_ip, 'uname -a')
+                cmd.ssh(self.user + "@" + self._controller_ip, 'uname -a')
                 for worker_ip in self._worker_ips:
-                    cmd.ssh(worker_ip, 'uname -a')
+                    cmd.ssh(self.user + "@" + worker_ip, 'uname -a')
                 # indicate that servers are ready
                 servers_ready = True
                 break
