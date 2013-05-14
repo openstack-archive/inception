@@ -53,6 +53,7 @@ class Orchestrator(object):
                  user='ubuntu',
                  image='3ab46178-eaae-46f0-8c13-6aad4d62ecde',
                  flavor=3,
+                 gateway_flavor=1,
                  key_name='shared',
                  security_groups=('default', 'ssh'),
                  src_dir='../bin/',
@@ -69,6 +70,7 @@ class Orchestrator(object):
         @param user: username (with root permission) for all servers
         @param image: default u1204-130508-gv
         @param flavor: default medium
+        @param gateway_flavor: default tiny
         @param key_name: ssh public key to be injected
         @param security_groups:
         @param src_dir: location from where scripts are uploaded to servers.
@@ -89,6 +91,7 @@ class Orchestrator(object):
         self.user = user
         self.image = image
         self.flavor = flavor
+        self.gateway_flavor = gateway_flavor
         self.key_name = key_name
         self.security_groups = security_groups
         self.src_dir = os.path.join(os.path.abspath(
@@ -149,7 +152,7 @@ class Orchestrator(object):
         gateway = self.client.servers.create(
             name=self.prefix + '-gateway',
             image=self.image,
-            flavor=self.flavor,
+            flavor=self.gateway_flavor,
             key_name=self.key_name,
             security_groups=self.security_groups,
             userdata=self.userdata)
