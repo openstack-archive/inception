@@ -326,10 +326,11 @@ def main():
         usage()
         sys.exit(1)
     orchestrator = Orchestrator(prefix, num_workers)
-    orchestrator.start(atomic)
-    # give me a ipython shell after inception cloud is launched
     if shell:
+        # give me a ipython shell
         IPython.embed()
+        return
+    orchestrator.start(atomic)
 
 
 def usage():
