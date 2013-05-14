@@ -53,6 +53,7 @@ class Orchestrator(object):
                  user='ubuntu',
                  image='3ab46178-eaae-46f0-8c13-6aad4d62ecde',
                  flavor=3,
+                 gateway_flavor=1,
                  key_name='shared',
                  security_groups=('default', 'ssh'),
                  src_dir='../bin/',
@@ -69,6 +70,7 @@ class Orchestrator(object):
         @param user: username (with root permission) for all servers
         @param image: default u1204-130508-gv
         @param flavor: default medium
+        @param gateway_flavor: default tiny
         @param key_name: ssh public key to be injected
         @param security_groups:
         @param src_dir: location from where scripts are uploaded to servers.
@@ -89,6 +91,7 @@ class Orchestrator(object):
         self.user = user
         self.image = image
         self.flavor = flavor
+        self.gateway_flavor = gateway_flavor
         self.key_name = key_name
         self.security_groups = security_groups
         self.src_dir = os.path.join(os.path.abspath(
@@ -134,7 +137,7 @@ class Orchestrator(object):
             self._setup_controller()
             self._setup_workers()
             print ("Your inception cloud is ready!!! gateway IP=%s" %
-                   self._gateway_floating_ip)
+                   self._gateway_floating_ip.ip)
         except Exception:
             print traceback.format_exc()
             if atomic:
@@ -149,7 +152,7 @@ class Orchestrator(object):
         gateway = self.client.servers.create(
             name=self.prefix + '-gateway',
             image=self.image,
-            flavor=self.flavor,
+            flavor=self.gateway_flavor,
             key_name=self.key_name,
             security_groups=self.security_groups,
             userdata=self.userdata)
@@ -204,11 +207,11 @@ class Orchestrator(object):
                 self._worker_ips = [self._get_server_ip(_id)
                                     for _id in self._worker_ids]
                 # test ssh-able
-                cmd.ssh(self._gateway_ip, 'uname -a')
-                cmd.ssh(self._chefserver_ip, 'uname -a')
-                cmd.ssh(self._controller_ip, 'uname -a')
+                cmd.ssh(self.user + "@" + self._gateway_ip, 'true')
+                cmd.ssh(self.user + "@" + self._chefserver_ip, 'true')
+                cmd.ssh(self.user + "@" + self._controller_ip, 'true')
                 for worker_ip in self._worker_ips:
-                    cmd.ssh(worker_ip, 'uname -a')
+                    cmd.ssh(self.user + "@" + worker_ip, 'true')
                 # indicate that servers are ready
                 servers_ready = True
                 break
@@ -315,7 +318,7 @@ def main():
         optdict = dict(optlist)
         prefix = optdict['-p']
         if '-' in prefix:
-            raise RuntimeError('"-" can not exist in prefix')
+            raise ValueError('"-" cannot exist in prefix=%r' % prefix)
         num_workers = int(optdict['-n'])
         if "--shell" in optdict:
             shell = True
@@ -326,10 +329,11 @@ def main():
         usage()
         sys.exit(1)
     orchestrator = Orchestrator(prefix, num_workers)
-    orchestrator.start(atomic)
-    # give me a ipython shell after inception cloud is launched
     if shell:
+        # give me a ipython shell
         IPython.embed()
+        return
+    orchestrator.start(atomic)
 
 
 def usage():
