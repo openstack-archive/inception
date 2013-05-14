@@ -9,18 +9,25 @@ def local(cmd, screen_output=False):
     Execute a local command
 
     @param cmd: a str, e.g., 'uname -a'
+    @param screen_output: whether output to screen or capture the output
+
+    @return: (output, error)
+      if screen_output is False, return ("", "")
     """
     print 'executing command=', cmd
+    stdout, stderr = ((None, None) if screen_output
+                      else (subprocess.PIPE, subprocess.PIPE))
+    proc = subprocess.Popen(cmd,
+                            shell=True,
+                            stdin=None,
+                            stderr=stderr,
+                            stdout=stdout)
+    out, error = proc.communicate()  # 0: stdout, 1:stderr
+    if proc.returncode > 0:
+        raise subprocess.CalledProcessError(proc.returncode, cmd, output=out)
     if screen_output:
-        out = subprocess.check_call([e for e in cmd.split(' ') if e])
-        return (str(out), "")
+        return ("", "")
     else:
-        proc = subprocess.Popen(cmd,
-                                shell=True,
-                                stdin=None,
-                                stderr=subprocess.PIPE,
-                                stdout=subprocess.PIPE)
-        out, error = proc.communicate()  # 0: stdout, 1:stderr
         return out.rstrip('\n'), error  # remove trailing '\n'
 
 
@@ -47,30 +54,28 @@ def ssh(uri, cmd, screen_output=False, silent=True, agent_forwarding=False):
     ## default port
     else:
         port = 22
-    flag = '-T'
+    ## construct flags
+    flags = ['-T']
     if silent:
-        flag += ' -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+        flags.append('-o StrictHostKeyChecking=no')
+        flags.append('-o UserKnownHostsFile=/dev/null')
     if agent_forwarding:
-        flag += ' -A'
-    cmd = 'ssh -p %s %s %s %s' % (port, flag, uri, cmd)
+        flags.append('-A')
+    cmd = 'ssh -p %s %s %s %s' % (port, ' '.join(flags), uri, cmd)
     print 'executing command=', cmd
-    if screen_output:
-        stdout = None
-        stderr = None
-    else:
-        stdout = subprocess.PIPE
-        stderr = subprocess.PIPE
+    stdout, stderr = ((None, None) if screen_output
+                      else (subprocess.PIPE, subprocess.PIPE))
     proc = subprocess.Popen(cmd,
                             shell=True,
                             stdin=None,
                             stderr=stderr,
                             stdout=stdout)
     out, error = proc.communicate()  # 0: stdout, 1:stderr
-    ctor = subprocess.CalledProcessError
-    if proc.returncode == 255:
-        ctor = SshConnectionError
+    ctor = (SshConnectionError if proc.returncode == 255
+            else subprocess.CalledProcessError)
     if proc.returncode > 0:
         raise ctor(proc.returncode, cmd, output=out)
     if screen_output:
         return ("", "")
-    return out.rstrip('\n'), error  # remove trailing '\n'
+    else:
+        return out.rstrip('\n'), error  # remove trailing '\n'
