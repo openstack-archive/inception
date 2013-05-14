@@ -137,7 +137,7 @@ class Orchestrator(object):
             self._setup_controller()
             self._setup_workers()
             print ("Your inception cloud is ready!!! gateway IP=%s" %
-                   self._gateway_floating_ip)
+                   self._gateway_floating_ip.ip)
         except Exception:
             print traceback.format_exc()
             if atomic:
