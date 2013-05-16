@@ -2,6 +2,8 @@
 """
 - Networks:
 
+User /24 address for now (faster OpenStack deployment), increase to /16 later
+
 eth0, management: inherent interface on each rVM
 eth1, ops: 10.251.x.x/16
 eth2, private: 10.252.x.x/16
@@ -114,12 +116,16 @@ class Orchestrator(object):
                              os.environ['OS_AUTH_URL'])
         self._gateway_id = None
         self._gateway_ip = None
+        self._gateway_name = None
         self._chefserver_id = None
         self._chefserver_ip = None
+        self._chefserver_name = None
         self._controller_id = None
         self._controller_ip = None
+        self._controller_name = None
         self._worker_ids = []
         self._worker_ips = []
+        self._worker_names = []
         self._gateway_floating_ip = None
 
     def start(self, atomic):
@@ -201,11 +207,16 @@ class Orchestrator(object):
         while time.time() - begin_time <= self.timeout:
             try:
                 # get IP addr of servers
-                self._gateway_ip = self._get_server_ip(self._gateway_id)
-                self._chefserver_ip = self._get_server_ip(self._chefserver_id)
-                self._controller_ip = self._get_server_ip(self._controller_id)
-                self._worker_ips = [self._get_server_ip(_id)
-                                    for _id in self._worker_ids]
+                (self._gateway_ip, self._gateway_name) = self._get_server_info(
+                    self._gateway_id)
+                (self._chefserver_ip, self._chefserver_name) = (
+                    self._get_server_info(self._chefserver_id))
+                (self._controller_ip, self._controller_name) = (
+                    self._get_server_info(self._controller_id))
+                for _id in self._worker_ids:
+                    (ipaddr, name) = self._get_server_info(_id)
+                    self._worker_ips.append(ipaddr)
+                    self._worker_names.append(name)
                 # test ssh-able
                 cmd.ssh(self.user + "@" + self._gateway_ip, 'true')
                 cmd.ssh(self.user + "@" + self._chefserver_ip, 'true')
@@ -228,17 +239,17 @@ class Orchestrator(object):
         self.client.servers.add_floating_ip(self._gateway_id, floating_ip)
         self._gateway_floating_ip = floating_ip
 
-    def _get_server_ip(self, _id):
+    def _get_server_info(self, _id):
         """
-        get server IP from server ID
+        get server information (IP, hostname) from server ID
 
         @param _id: server ID
         """
         server = self.client.servers.get(_id)
         # get ipaddress (there is only 1 item in the dict)
         for network in server.networks:
-            ipaddress = server.networks[network][0]
-        return ipaddress
+            ipaddr = server.networks[network][0]
+        return (ipaddr, server.name)
 
     def _setup_chefserver(self):
         """
@@ -257,10 +268,13 @@ class Orchestrator(object):
         """
         ips = ([self._chefserver_ip, self._gateway_ip, self._controller_ip]
                + self._worker_ips)
-        for ip in ips:
+        names = ([self._chefserver_name, self._gateway_name,
+                  self._controller_name] + self._worker_names)
+        for (ipaddr, name) in zip(ips, names):
             out, error = cmd.ssh(
                 self.user + '@' + self._chefserver_ip,
-                '/usr/bin/knife bootstrap %s -x %s --sudo' % (ip, self.user),
+                '/usr/bin/knife bootstrap %s -x %s -N %s --sudo' % (
+                    ipaddr, self.user, name),
                 screen_output=True,
                 agent_forwarding=True)
             print 'out=', out, 'error=', error
