@@ -142,8 +142,10 @@ class Orchestrator(object):
             self._deploy_vxlan_network()
             self._setup_controller()
             self._setup_workers()
-            print ("Your inception cloud is ready!!! gateway IP=%s" %
-                   self._gateway_floating_ip.ip)
+            print "Your inception cloud is ready!!!"
+            print "Gateway IP is %s" % self._gateway_floating_ip.ip
+            print "Chef server WebUI is http://%s:4040" % self._chefserver_ip
+            print "OpenStack dashboard is https://%s" % self._controller_ip
         except Exception:
             print traceback.format_exc()
             if atomic:
