@@ -12,7 +12,7 @@ def local(cmd, screen_output=False):
     @param screen_output: whether output to screen or capture the output
 
     @return: (output, error)
-      if screen_output is False, return ("", "")
+      if screen_output is True, return ("", "")
     """
     print 'executing command=', cmd
     stdout, stderr = ((None, None) if screen_output
@@ -46,7 +46,7 @@ def ssh(uri, cmd, screen_output=False, silent=True, agent_forwarding=False):
     @param silent: whether prompt for yes/no questions
 
     @return: (output, error)
-      if screen_output is False, return ("", "")
+      if screen_output is True, return ("", "")
     """
     ## if ssh port forwarding address, find out the port
     if ':' in uri:

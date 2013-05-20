@@ -18,8 +18,6 @@ rVMs eth1 IPs
 [prefix]-worker-1, 10.251.1.1
 [prefix]-worker-2(s), 10.251.1.2 [ - 10.251.255.254] # maximum ~65000
 
-DNS: dnsmasq (disable dhcpclient from overwriting /etc/resolv.conf)
-
 End-user input: (1) # of workers (default 2), (2) ssh_public_key. What user
 data does orchestrator store?
 
@@ -139,7 +137,8 @@ class Orchestrator(object):
             self._create_servers()
             self._setup_chefserver()
             self._checkin_chefserver()
-            self._deploy_vxlan_network()
+            self._deploy_network_vxlan()
+            self._deploy_dnsmasq()
             self._setup_controller()
             self._setup_workers()
             print "Your inception cloud is ready!!!"
@@ -259,33 +258,69 @@ class Orchestrator(object):
         cookbooks, roles, and environments
         """
         for key in self.chefserver_files:
-            out, error = cmd.ssh(self.user + '@' + self._chefserver_ip,
-                                 '/bin/bash ' + key,
-                                 screen_output=True)
-            print 'out=', out, 'error=', error
+            cmd.ssh(self.user + '@' + self._chefserver_ip,
+                    '/bin/bash ' + key,
+                    screen_output=True)
 
     def _checkin_chefserver(self):
         """
-        check-in all VMs into chefserver (knife bootstrap), via eth0
+        check-in all VMs into chefserver (knife bootstrap), and set their
+        environment to be self.prefix
         """
-        ips = ([self._chefserver_ip, self._gateway_ip, self._controller_ip]
-               + self._worker_ips)
-        names = ([self._chefserver_name, self._gateway_name,
-                  self._controller_name] + self._worker_names)
-        for (ipaddr, name) in zip(ips, names):
-            out, error = cmd.ssh(
-                self.user + '@' + self._chefserver_ip,
-                '/usr/bin/knife bootstrap %s -x %s -N %s --sudo' % (
-                    ipaddr, self.user, name),
-                screen_output=True,
-                agent_forwarding=True)
-            print 'out=', out, 'error=', error
+        ipaddrs = ([self._chefserver_ip, self._gateway_ip, self._controller_ip]
+                   + self._worker_ips)
+        hostnames = ([self._chefserver_name, self._gateway_name,
+                      self._controller_name] + self._worker_names)
+        for (ipaddr, hostname) in zip(ipaddrs, hostnames):
+            cmd.ssh(self.user + '@' + self._chefserver_ip,
+                    '/usr/bin/knife bootstrap %s -x %s -N %s -E %s --sudo' % (
+                        ipaddr, self.user, hostname, self.prefix),
+                    screen_output=True,
+                    agent_forwarding=True)
 
-    def _deploy_vxlan_network(self):
+    def _deploy_network_vxlan(self):
         """
-        deploy VXLAN network via openvswitch cookbook for all VMs, i.e., build
-        VXLAN tunnels with gateway as layer-2 hub and other VMs as spokes
+        deploy network-vxlan (recipe) via cookbook openvswitch for all VMs,
+        i.e., build VXLAN tunnels with gateway as layer-2 hub and other VMs
+        as spokes, and assign ip address and netmask
         """
+        hostnames = ([self._chefserver_name, self._gateway_name,
+                      self._controller_name] + self._worker_names)
+        for hostname in hostnames:
+            cmd.ssh(self.user + '@' + self._chefserver_ip,
+                    "/usr/bin/knife node run_list add %s %s" % (
+                        hostname, 'recipe[openvswitch::network-vxlan]'),
+                    screen_output=True,
+                    agent_forwarding=True)
+        self._run_chef_client()
+
+    def _deploy_dnsmasq(self):
+        """
+        deploy dnsmasq (recipe) via cookbook openvswitch for all VMs,
+        i.e., install and config on dnsmasq on gateway node, and point all
+        VMs to gateway as nameserver
+        """
+        hostnames = ([self._chefserver_name, self._gateway_name,
+                      self._controller_name] + self._worker_names)
+        for hostname in hostnames:
+            cmd.ssh(self.user + '@' + self._chefserver_ip,
+                    "/usr/bin/knife node run_list add %s %s" % (
+                        hostname, 'recipe[openvswitch::dnsmasq]'),
+                    screen_output=True,
+                    agent_forwarding=True)
+        self._run_chef_client()
+
+    def _run_chef_client(self):
+        """
+        run the chef-client for all specified cookbooks in the run_list
+        """
+        ipaddrs = ([self._chefserver_ip, self._gateway_ip, self._controller_ip]
+                   + self._worker_ips)
+        for ipaddr in ipaddrs:
+            cmd.ssh(self.user + '@' + ipaddr,
+                    "sudo chef-client",
+                    screen_output=True,
+                    agent_forwarding=True)
 
     def _setup_controller(self):
         """
@@ -336,6 +371,8 @@ def main():
         if '-' in prefix:
             raise ValueError('"-" cannot exist in prefix=%r' % prefix)
         num_workers = int(optdict['-n'])
+        if num_workers > 5:
+            raise ValueError("currently only supports num_workers <= 5")
         if "--shell" in optdict:
             shell = True
         if "--atomic" in optdict:
