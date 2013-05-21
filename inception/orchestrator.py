@@ -69,6 +69,8 @@ class Orchestrator(object):
         """
         @param prefix: unique name as prefix
         @param num_workers: how many worker nodes you'd like
+        @param git_chef_repo: chef repository location via git
+        @param git_chef_repo_branch: which git branch to use in repo
         @param user: username (with root permission) for all servers
         @param image: default u1204-130508-gv
         @param flavor: default medium
@@ -409,7 +411,7 @@ def usage():
     print """
 python %s -p <prefix> -n <num_workers> [--shell] [--atomic]
   [--git-chef-repo=git://github.com/maoy/inception-chef-repo.git]
-  [--chef-branch=git://github.com/maoy/inception-chef-repo.git]
+  [--git-chef-repo-branch=master]
 
 Note: make sure OpenStack-related environment variables are defined.
 """ % (__file__,)
