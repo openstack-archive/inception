@@ -14,7 +14,7 @@ mkdir -p ~/chef-repo
 git clone -b ${CHEF_REPO_BRANCH} --recursive ${CHEF_REPO} ~/chef-repo
 
 cd ~/chef-repo/environments/
-./instantiate.sh ${PREFIX} allinone
+./instantiate.sh ${PREFIX} onerack
 
 cd ~/chef-repo
 knife cookbook upload -a
