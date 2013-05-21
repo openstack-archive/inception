@@ -258,11 +258,12 @@ class Orchestrator(object):
         execute uploaded scripts to install chef, config knife, upload
         cookbooks, roles, and environments
         """
-        for key in self.chefserver_files:
-            out, error = cmd.ssh(self.user + '@' + self._chefserver_ip,
-                                 '/bin/bash ' + key,
-                                 screen_output=True)
-            print 'out=', out, 'error=', error
+        def ssh_chefserver(command):
+            return cmd.ssh(self.user + "@" + self._chefserver_ip,
+                           "/bin/bash " + command, screen_output=True)
+        ssh_chefserver('install_chefserver.sh')
+        ssh_chefserver('configure_knife.sh')
+        ssh_chefserver('setup_chef_repo.sh')
 
     def _checkin_chefserver(self):
         """
