@@ -50,8 +50,8 @@ class Orchestrator(object):
     def __init__(self,
                  prefix,
                  num_workers,
-                 git_chef_repo,
-                 git_chef_repo_branch,
+                 chef_repo,
+                 chef_repo_branch,
                  user='ubuntu',
                  image='3ab46178-eaae-46f0-8c13-6aad4d62ecde',
                  flavor=3,
@@ -69,8 +69,8 @@ class Orchestrator(object):
         """
         @param prefix: unique name as prefix
         @param num_workers: how many worker nodes you'd like
-        @param git_chef_repo: chef repository location via git
-        @param git_chef_repo_branch: which git branch to use in repo
+        @param chef_repo: chef repository location
+        @param chef_repo_branch: which branch to use in repo
         @param user: username (with root permission) for all servers
         @param image: default u1204-130508-gv
         @param flavor: default medium
@@ -92,8 +92,8 @@ class Orchestrator(object):
         ## args
         self.prefix = prefix
         self.num_workers = num_workers
-        self.git_chef_repo = git_chef_repo
-        self.git_chef_repo_branch = git_chef_repo_branch
+        self.chef_repo = chef_repo
+        self.chef_repo_branch = chef_repo_branch
         self.user = user
         self.image = image
         self.flavor = flavor
@@ -269,7 +269,7 @@ class Orchestrator(object):
         ssh_chefserver('install_chefserver.sh')
         ssh_chefserver('configure_knife.sh')
         ssh_chefserver('setup_chef_repo.sh %s %s'
-                       % (self.git_chef_repo, self.git_chef_repo_branch))
+                       % (self.chef_repo, self.chef_repo_branch))
 
     def _checkin_chefserver(self):
         """
@@ -373,12 +373,12 @@ def main():
     """
     shell = False
     atomic = False
-    git_chef_repo = "git://github.com/maoy/inception-chef-repo.git"
-    git_chef_repo_branch = "master"
+    chef_repo = "git://github.com/maoy/inception-chef-repo.git"
+    chef_repo_branch = "master"
     try:
         optlist, _ = getopt.getopt(sys.argv[1:], 'p:n:',
-                                   ["shell", "atomic", "git-chef-repo=",
-                                    "git-chef-repo-branch="])
+                                   ["shell", "atomic", "chef-repo=",
+                                    "chef-repo-branch="])
         optdict = dict(optlist)
         prefix = optdict['-p']
         if '-' in prefix:
@@ -390,16 +390,16 @@ def main():
             shell = True
         if "--atomic" in optdict:
             atomic = True
-        if "--git-chef-repo" in optdict:
-            git_chef_repo = optdict["--git-chef-repo"]
-        if "--git-chef-repo-branch" in optdict:
-            git_chef_repo_branch = optdict["--git-chef-repo-branch"]
+        if "--chef-repo" in optdict:
+            chef_repo = optdict["--chef-repo"]
+        if "--chef-repo-branch" in optdict:
+            chef_repo_branch = optdict["--chef-repo-branch"]
     except Exception:
         print traceback.format_exc()
         usage()
         sys.exit(1)
-    orchestrator = Orchestrator(prefix, num_workers, git_chef_repo,
-                                git_chef_repo_branch)
+    orchestrator = Orchestrator(prefix, num_workers, chef_repo,
+                                chef_repo_branch)
     if shell:
         # give me a ipython shell
         IPython.embed()
@@ -410,8 +410,8 @@ def main():
 def usage():
     print """
 python %s -p <prefix> -n <num_workers> [--shell] [--atomic]
-  [--git-chef-repo=git://github.com/maoy/inception-chef-repo.git]
-  [--git-chef-repo-branch=master]
+  [--chef-repo=git://github.com/maoy/inception-chef-repo.git]
+  [--chef-repo-branch=master]
 
 Note: make sure OpenStack-related environment variables are defined.
 """ % (__file__,)

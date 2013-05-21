@@ -6,12 +6,12 @@ set -e
 HOSTNAME_ARRAY=(${HOSTNAME//-/ }) # split the hostname by "-"
 PREFIX=${HOSTNAME_ARRAY[0]} # the first half is prefix
 CHEF_REPO=${1}
-GIT_BRANCH=${2}
+CHEF_REPO_BRANCH=${2}
 
 mkdir -p ~/chef-repo
 
 # first, clone the repo
-git clone -b ${GIT_BRANCH} --recursive ${CHEF_REPO} ~/chef-repo
+git clone -b ${CHEF_REPO_BRANCH} --recursive ${CHEF_REPO} ~/chef-repo
 
 cd ~/chef-repo/environments/
 ./instantiate.sh ${PREFIX} allinone
