@@ -2,14 +2,12 @@
 """
 - Networks:
 
-User /24 address for now (faster OpenStack deployment), increase to /16 later
+(use /24 address for now (faster OpenStack deployment), increase to /16 later)
 
 eth0, management: inherent interface on each rVM
 eth1, ops: 10.251.x.x/16
 eth2, private: 10.252.x.x/16
 eth3, public: 172.31.x.x/16
-
-- Others:
 
 rVMs eth1 IPs
 [prefix]-gateway, 10.251.0.1
@@ -18,11 +16,7 @@ rVMs eth1 IPs
 [prefix]-worker-1, 10.251.1.1
 [prefix]-worker-2(s), 10.251.1.2 [ - 10.251.255.254] # maximum ~65000
 
-End-user input: (1) # of workers (default 2), (2) ssh_public_key. What user
-data does orchestrator store?
-
-prefix generation: gurantee uniqueness, along with a sequantially growing
-number?
+webui: end-user input: (1) # of workers (default 2), (2) ssh_public_key
 
 templatize all templatable configurations (environments, roles, etc), put the
 rest (sensitive data) in a private configuration file specific to each
@@ -89,6 +83,11 @@ class Orchestrator(object):
         @param poll_interval: every this time poll to check whether a server
             has finished launching, i.e., ssh-able
         """
+        ## check args
+        if num_workers > 5:
+            raise ValueError("currently only supports num_workers <= 5")
+        if '-' in prefix:
+            raise ValueError('"-" cannot exist in prefix=%r' % prefix)
         ## args
         self.prefix = prefix
         self.num_workers = num_workers
@@ -140,6 +139,7 @@ class Orchestrator(object):
             created servers
         """
         try:
+            self._check_existence()
             self._create_servers()
             self._setup_chefserver()
             self._checkin_chefserver()
@@ -147,7 +147,7 @@ class Orchestrator(object):
             self._deploy_dnsmasq()
             self._setup_controller()
             self._setup_workers()
-            print "Your inception cloud is ready!!!"
+            print "Your inception cloud '%s' is ready!!!" % self.prefix
             print "Gateway IP is %s" % self._gateway_floating_ip.ip
             print "Chef server WebUI is http://%s:4040" % self._chefserver_ip
             print "OpenStack dashboard is https://%s" % self._controller_ip
@@ -155,6 +155,14 @@ class Orchestrator(object):
             print traceback.format_exc()
             if atomic:
                 self.cleanup()
+
+    def _check_existence(self):
+        """
+        Check whether inception cloud existence based on given self.prefix
+        """
+        for server in self.client.servers.list():
+            if '-' in server.name and server.name.split('-')[0] == self.prefix:
+                raise ValueError('prefix=%s is already used' % self.prefix)
 
     def _create_servers(self):
         """
@@ -254,8 +262,8 @@ class Orchestrator(object):
         """
         server = self.client.servers.get(_id)
         # get ipaddress (there is only 1 item in the dict)
-        for network in server.networks:
-            ipaddr = server.networks[network][0]
+        for key in server.networks:
+            ipaddr = server.networks[key][0]
         return (ipaddr, server.name)
 
     def _setup_chefserver(self):
@@ -344,27 +352,41 @@ class Orchestrator(object):
 
     def cleanup(self):
         """
-        blow up the whole inception cloud
+        Clean up the whole inception cloud, based on self.prefix
         """
-        print "Let's blow up the whole inception cloud..."
+        print "Let's clean up inception cloud '%s'..." % self.prefix
+        ## find out servers info
+        servers = []
+        gateway = None
+        gateway_ip = None
+        for server in self.client.servers.list():
+            if '-' in server.name and server.name.split('-')[0] == self.prefix:
+                servers.append(server)
+            if server.name == self.prefix + '-gateway':
+                gateway = server
+                # get ipaddress (there is only 1 item in the dict)
+                for key in gateway.networks:
+                    if len(gateway.networks[key]) >= 2:
+                        gateway_ip = gateway.networks[key][1]
+        ## try deleting the floating IP of gateway
         try:
-            print ("floating ip %s is being released and deleted" %
-                   self._gateway_floating_ip)
-            self.client.servers.remove_floating_ip(self._gateway_id,
-                                                   self._gateway_floating_ip)
-            self.client.floating_ips.delete(self._gateway_floating_ip)
+            for floating_ip in self.client.floating_ips.list():
+                if floating_ip.ip == gateway_ip:
+                    print ("Disassociating and releasing %s" % floating_ip)
+                    self.client.servers.remove_floating_ip(gateway,
+                                                           floating_ip)
+                    self.client.floating_ips.delete(floating_ip)
         except Exception:
             print traceback.format_exc()
-        ids = ([self._chefserver_id, self._gateway_id, self._controller_id] +
-               self._worker_ids)
-        for _id in ids:
+        ## try deleting each server
+        for server in servers:
             try:
-                server = self.client.servers.get(_id)
+                print 'Deleting %s' % server
                 server.delete()
-                print '%s is being deleted' % server.name
             except Exception:
                 print traceback.format_exc()
                 continue
+        print "Inception cloud '%s' has been cleaned up." % self.prefix
 
 
 def main():
@@ -373,23 +395,22 @@ def main():
     """
     shell = False
     atomic = False
+    cleanup = False
     chef_repo = "git://github.com/maoy/inception-chef-repo.git"
     chef_repo_branch = "master"
     try:
         optlist, _ = getopt.getopt(sys.argv[1:], 'p:n:',
-                                   ["shell", "atomic", "chef-repo=",
-                                    "chef-repo-branch="])
+                                   ["shell", "atomic", "cleanup",
+                                    "chef-repo=", "chef-repo-branch="])
         optdict = dict(optlist)
         prefix = optdict['-p']
-        if '-' in prefix:
-            raise ValueError('"-" cannot exist in prefix=%r' % prefix)
         num_workers = int(optdict['-n'])
-        if num_workers > 5:
-            raise ValueError("currently only supports num_workers <= 5")
         if "--shell" in optdict:
             shell = True
         if "--atomic" in optdict:
             atomic = True
+        if "--cleanup" in optdict:
+            cleanup = True
         if "--chef-repo" in optdict:
             chef_repo = optdict["--chef-repo"]
         if "--chef-repo-branch" in optdict:
@@ -404,12 +425,15 @@ def main():
         # give me a ipython shell
         IPython.embed()
         return
-    orchestrator.start(atomic)
+    if cleanup:
+        orchestrator.cleanup()
+    else:
+        orchestrator.start(atomic)
 
 
 def usage():
     print """
-python %s -p <prefix> -n <num_workers> [--shell] [--atomic]
+python %s -p <prefix> -n <num_workers> [--shell] [--atomic] [--cleanup]
   [--chef-repo=git://github.com/maoy/inception-chef-repo.git]
   [--chef-repo-branch=master]
 
