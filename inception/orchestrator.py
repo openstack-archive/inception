@@ -323,9 +323,12 @@ class Orchestrator(object):
         hostnames = ([self._chefserver_name, self._gateway_name,
                       self._controller_name] + self._worker_names)
         for hostname in hostnames:
+            self._add_run_list(hostname, recipe)
+
+    def _add_run_list(self, hostname, item):
             cmd.ssh(self.user + '@' + self._chefserver_ip,
                     "/usr/bin/knife node run_list add %s %s" % (
-                        hostname, recipe),
+                        hostname, item),
                     screen_output=True,
                     agent_forwarding=True)
 
