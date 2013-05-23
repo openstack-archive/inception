@@ -47,6 +47,7 @@ class Orchestrator(object):
                  num_workers,
                  chef_repo,
                  chef_repo_branch,
+                 sequential,
                  user='ubuntu',
                  image='3ab46178-eaae-46f0-8c13-6aad4d62ecde',
                  flavor=3,
@@ -60,12 +61,15 @@ class Orchestrator(object):
                                    'configure_knife.sh',
                                    'setup_chef_repo.sh'),
                  timeout=90,
-                 poll_interval=5):
+                 poll_interval=5,
+                 ):
         """
         @param prefix: unique name as prefix
         @param num_workers: how many worker nodes you'd like
         @param chef_repo: chef repository location
         @param chef_repo_branch: which branch to use in repo
+        @param sequential: whether run threads in sequential or parallel
+            (for accelerating)
         @param user: username (with root permission) for all servers
         @param image: default u1204-130508-gv
         @param flavor: default medium
@@ -94,6 +98,7 @@ class Orchestrator(object):
         self.num_workers = num_workers
         self.chef_repo = chef_repo
         self.chef_repo_branch = chef_repo_branch
+        self.sequential = sequential
         self.user = user
         self.image = image
         self.flavor = flavor
@@ -287,8 +292,8 @@ class Orchestrator(object):
         environment to be self.prefix
         """
         threads = []
-        ipaddrs = ([self._chefserver_ip, self._gateway_ip, self._controller_ip]
-                   + self._worker_ips)
+        ipaddrs = ([self._chefserver_ip, self._gateway_ip,
+                    self._controller_ip] + self._worker_ips)
         hostnames = ([self._chefserver_name, self._gateway_name,
                       self._controller_name] + self._worker_names)
         for (ipaddr, hostname) in zip(ipaddrs, hostnames):
@@ -300,9 +305,7 @@ class Orchestrator(object):
                                       kwargs={"screen_output": True,
                                               "agent_forwarding": True})
             threads.append(thread)
-            thread.start()
-        for thread in threads:
-            thread.join()
+        self._run_threads(threads)
 
     def _deploy_network_vxlan(self):
         """
@@ -310,8 +313,12 @@ class Orchestrator(object):
         i.e., build VXLAN tunnels with gateway as layer-2 hub and other VMs
         as spokes, and assign ip address and netmask
         """
-        self._add_recipe('recipe[openvswitch::network-vxlan]')
-        self._run_chef_client()
+        hostnames = ([self._chefserver_name, self._gateway_name,
+                      self._controller_name] + self._worker_names)
+        self._add_run_list(hostnames, 'recipe[openvswitch::network-vxlan]')
+        ipaddrs = ([self._chefserver_ip, self._gateway_ip,
+                    self._controller_ip] + self._worker_ips)
+        self._run_chef_client(ipaddrs)
 
     def _deploy_dnsmasq(self):
         """
@@ -319,39 +326,40 @@ class Orchestrator(object):
         i.e., install and config on dnsmasq on gateway node, and point all
         VMs to gateway as nameserver
         """
-        self._add_recipe('recipe[openvswitch::dnsmasq]')
-        self._run_chef_client()
-
-    def _add_recipe(self, recipe):
-        """
-        for each server, add a recipe its run_list
-
-        @param recipe: name of the recipe
-        """
-        threads = []
         hostnames = ([self._chefserver_name, self._gateway_name,
                       self._controller_name] + self._worker_names)
+        self._add_run_list(hostnames, 'recipe[openvswitch::dnsmasq]')
+        ipaddrs = ([self._chefserver_ip, self._gateway_ip,
+                    self._controller_ip] + self._worker_ips)
+        self._run_chef_client(ipaddrs)
+
+    def _add_run_list(self, hostnames, item):
+        """
+        for each server, add an item to its run_list
+
+        @param hostnames: hostnames of specified servers
+        @param item: name of the item (e.g., recipe, role, etc)
+        """
+        threads = []
         for hostname in hostnames:
             uri = self.user + '@' + self._chefserver_ip
             command = "/usr/bin/knife node run_list add %s %s" % (
-                hostname, recipe)
+                hostname, item)
             thread = threading.Thread(target=cmd.ssh,
                                       args=(uri, command),
                                       kwargs={"screen_output": True,
                                               "agent_forwarding": True})
             threads.append(thread)
-            thread.start()
-        for thread in threads:
-            thread.join()
+        self._run_threads(threads)
 
-    def _run_chef_client(self):
+    def _run_chef_client(self, ipaddrs):
         """
-        for each server, run the chef-client for all specified cookbooks in its
-        run_list
+        for each server in the address list, run chef-client for all
+        specified cookbooks in its run_list
+
+        @param param: ip addresses of the servers
         """
         threads = []
-        ipaddrs = ([self._chefserver_ip, self._gateway_ip,
-                    self._controller_ip] + self._worker_ips)
         for ipaddr in ipaddrs:
             uri = self.user + '@' + ipaddr
             command = "sudo chef-client"
@@ -360,16 +368,23 @@ class Orchestrator(object):
                                       kwargs={"screen_output": True,
                                               "agent_forwarding": True})
             threads.append(thread)
-            thread.start()
-        for thread in threads:
-            thread.join()
+        self._run_threads(threads)
 
-    def _add_run_list(self, hostname, item):
-            cmd.ssh(self.user + '@' + self._chefserver_ip,
-                    "/usr/bin/knife node run_list add %s %s" % (
-                        hostname, item),
-                    screen_output=True,
-                    agent_forwarding=True)
+    def _run_threads(self, threads):
+        """
+        run threads, whether in a sequential or parallel way
+
+        @param threads: the threads to be run
+        """
+        if self.sequential:
+            for thread in threads:
+                thread.start()
+                thread.join()
+        else:
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
 
     def _setup_controller(self):
         """
@@ -378,8 +393,7 @@ class Orchestrator(object):
 
     def _setup_workers(self):
         """
-        deploy workers via misc cookbooks (parallelization via Python
-        multi-threading or multi-processing)
+        deploy workers via misc cookbooks
         """
 
     def cleanup(self):
@@ -430,9 +444,10 @@ def main():
     cleanup = False
     chef_repo = "git://github.com/maoy/inception-chef-repo.git"
     chef_repo_branch = "master"
+    sequential = False
     try:
         optlist, _ = getopt.getopt(sys.argv[1:], 'p:n:',
-                                   ["shell", "atomic", "cleanup",
+                                   ["shell", "atomic", "cleanup", "sequential",
                                     "chef-repo=", "chef-repo-branch="])
         optdict = dict(optlist)
         prefix = optdict['-p']
@@ -447,12 +462,14 @@ def main():
             chef_repo = optdict["--chef-repo"]
         if "--chef-repo-branch" in optdict:
             chef_repo_branch = optdict["--chef-repo-branch"]
+        if "--sequential" in optdict:
+            sequential = True
     except Exception:
         print traceback.format_exc()
         usage()
         sys.exit(1)
     orchestrator = Orchestrator(prefix, num_workers, chef_repo,
-                                chef_repo_branch)
+                                chef_repo_branch, sequential)
     if shell:
         # give me a ipython shell
         IPython.embed()
@@ -466,7 +483,7 @@ def main():
 def usage():
     print """
 python %s -p <prefix> -n <num_workers> [--shell] [--atomic] [--cleanup]
-  [--chef-repo=git://github.com/maoy/inception-chef-repo.git]
+  [--sequential] [--chef-repo=git://github.com/maoy/inception-chef-repo.git]
   [--chef-repo-branch=master]
 
 Note: make sure OpenStack-related environment variables are defined.
