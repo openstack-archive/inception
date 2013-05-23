@@ -305,11 +305,8 @@ class Orchestrator(object):
         hostnames = ([self._chefserver_name, self._gateway_name,
                       self._controller_name] + self._worker_names)
         for hostname in hostnames:
-            cmd.ssh(self.user + '@' + self._chefserver_ip,
-                    "/usr/bin/knife node run_list add %s %s" % (
-                        hostname, 'recipe[openvswitch::network-vxlan]'),
-                    screen_output=True,
-                    agent_forwarding=True)
+            self._add_chef_run_list(hostname,
+                                    'recipe[openvswitch::network-vxlan]')
         self._run_chef_client()
 
     def _deploy_dnsmasq(self):
@@ -321,12 +318,15 @@ class Orchestrator(object):
         hostnames = ([self._chefserver_name, self._gateway_name,
                       self._controller_name] + self._worker_names)
         for hostname in hostnames:
-            cmd.ssh(self.user + '@' + self._chefserver_ip,
-                    "/usr/bin/knife node run_list add %s %s" % (
-                        hostname, 'recipe[openvswitch::dnsmasq]'),
-                    screen_output=True,
-                    agent_forwarding=True)
+            self._add_chef_run_list(hostname, 'recipe[openvswitch::dnsmasq]')
         self._run_chef_client()
+
+    def _add_chef_run_list(self, hostname, run_list_item):
+        cmd.ssh(self.user + '@' + self._chefserver_ip,
+                "/usr/bin/knife node run_list add %s %s" % (
+                    hostname, run_list_item),
+                screen_output=True,
+                agent_forwarding=True)
 
     def _run_chef_client(self):
         """
