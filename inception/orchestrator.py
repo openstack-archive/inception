@@ -26,6 +26,7 @@ developer/user
 import getopt
 import os
 import sys
+import threading
 import time
 import traceback
 from collections import OrderedDict
@@ -285,16 +286,23 @@ class Orchestrator(object):
         check-in all VMs into chefserver (knife bootstrap), and set their
         environment to be self.prefix
         """
+        threads = []
         ipaddrs = ([self._chefserver_ip, self._gateway_ip, self._controller_ip]
                    + self._worker_ips)
         hostnames = ([self._chefserver_name, self._gateway_name,
                       self._controller_name] + self._worker_names)
         for (ipaddr, hostname) in zip(ipaddrs, hostnames):
-            cmd.ssh(self.user + '@' + self._chefserver_ip,
-                    '/usr/bin/knife bootstrap %s -x %s -N %s -E %s --sudo' % (
-                        ipaddr, self.user, hostname, self.prefix),
-                    screen_output=True,
-                    agent_forwarding=True)
+            uri = self.user + '@' + self._chefserver_ip
+            command = ('/usr/bin/knife bootstrap %s -x %s -N %s -E %s --sudo'
+                       % (ipaddr, self.user, hostname, self.prefix))
+            thread = threading.Thread(target=cmd.ssh,
+                             args=(uri, command),
+                             kwargs={"screen_output": True,
+                                    "agent_forwarding": True})
+            threads.append(thread)
+            thread.start()
+        for thread in threads:
+            thread.join()
 
     def _deploy_network_vxlan(self):
         """
@@ -320,28 +328,46 @@ class Orchestrator(object):
 
         @param recipe: name of the recipe
         """
+        threads = []
         hostnames = ([self._chefserver_name, self._gateway_name,
                       self._controller_name] + self._worker_names)
         for hostname in hostnames:
-            self._add_run_list(hostname, recipe)
-
-    def _add_run_list(self, hostname, item):
-            cmd.ssh(self.user + '@' + self._chefserver_ip,
-                    "/usr/bin/knife node run_list add %s %s" % (
-                        hostname, item),
-                    screen_output=True,
-                    agent_forwarding=True)
+            uri = self.user + '@' + self._chefserver_ip
+            command = "/usr/bin/knife node run_list add %s %s" % (
+                hostname, recipe)
+            thread = threading.Thread(target=cmd.ssh,
+                                      args=(uri, command),
+                                      kwargs={"screen_output": True,
+                                             "agent_forwarding": True})
+            threads.append(thread)
+            thread.start()
+        for thread in threads:
+            thread.join()
 
     def _run_chef_client(self):
         """
         for each server, run the chef-client for all specified cookbooks in its
         run_list
         """
-        ipaddrs = ([self._chefserver_ip, self._gateway_ip, self._controller_ip]
-                   + self._worker_ips)
+        threads = []
+        ipaddrs = ([self._chefserver_ip, self._gateway_ip,
+                    self._controller_ip] + self._worker_ips)
         for ipaddr in ipaddrs:
-            cmd.ssh(self.user + '@' + ipaddr,
-                    "sudo chef-client",
+            uri = self.user + '@' + ipaddr
+            command = "sudo chef-client"
+            thread = threading.Thread(target=cmd.ssh,
+                                      args=(uri, command),
+                                      kwargs={"screen_output": True,
+                                             "agent_forwarding": True})
+            threads.append(thread)
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+    def _add_run_list(self, hostname, item):
+            cmd.ssh(self.user + '@' + self._chefserver_ip,
+                    "/usr/bin/knife node run_list add %s %s" % (
+                        hostname, item),
                     screen_output=True,
                     agent_forwarding=True)
 
