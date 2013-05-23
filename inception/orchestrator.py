@@ -302,14 +302,7 @@ class Orchestrator(object):
         i.e., build VXLAN tunnels with gateway as layer-2 hub and other VMs
         as spokes, and assign ip address and netmask
         """
-        hostnames = ([self._chefserver_name, self._gateway_name,
-                      self._controller_name] + self._worker_names)
-        for hostname in hostnames:
-            cmd.ssh(self.user + '@' + self._chefserver_ip,
-                    "/usr/bin/knife node run_list add %s %s" % (
-                        hostname, 'recipe[openvswitch::network-vxlan]'),
-                    screen_output=True,
-                    agent_forwarding=True)
+        self._add_recipe('recipe[openvswitch::network-vxlan]')
         self._run_chef_client()
 
     def _deploy_dnsmasq(self):
@@ -318,19 +311,28 @@ class Orchestrator(object):
         i.e., install and config on dnsmasq on gateway node, and point all
         VMs to gateway as nameserver
         """
+        self._add_recipe('recipe[openvswitch::dnsmasq]')
+        self._run_chef_client()
+
+    def _add_recipe(self, recipe):
+        """
+        for each server, add a recipe its run_list
+
+        @param recipe: name of the recipe
+        """
         hostnames = ([self._chefserver_name, self._gateway_name,
                       self._controller_name] + self._worker_names)
         for hostname in hostnames:
             cmd.ssh(self.user + '@' + self._chefserver_ip,
                     "/usr/bin/knife node run_list add %s %s" % (
-                        hostname, 'recipe[openvswitch::dnsmasq]'),
+                        hostname, recipe),
                     screen_output=True,
                     agent_forwarding=True)
-        self._run_chef_client()
 
     def _run_chef_client(self):
         """
-        run the chef-client for all specified cookbooks in the run_list
+        for each server, run the chef-client for all specified cookbooks in its
+        run_list
         """
         ipaddrs = ([self._chefserver_ip, self._gateway_ip, self._controller_ip]
                    + self._worker_ips)
