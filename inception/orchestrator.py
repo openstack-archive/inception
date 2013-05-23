@@ -178,7 +178,7 @@ class Orchestrator(object):
             security_groups=self.security_groups,
             userdata=self.userdata)
         self._gateway_id = gateway.id
-        print "%s is being created" % gateway.name
+        print "Create %s" % gateway
 
         # launch chefserver
         chefserver = self.client.servers.create(
@@ -190,7 +190,7 @@ class Orchestrator(object):
             userdata=self.userdata,
             files=self.chefserver_files)
         self._chefserver_id = chefserver.id
-        print "%s is being created" % chefserver.name
+        print "Create %s" % chefserver
 
         # launch controller
         controller = self.client.servers.create(
@@ -201,7 +201,7 @@ class Orchestrator(object):
             security_groups=self.security_groups,
             userdata=self.userdata)
         self._controller_id = controller.id
-        print "%s is being created" % controller.name
+        print "Create %s" % controller
 
         # launch workers
         for i in xrange(self.num_workers):
@@ -213,7 +213,7 @@ class Orchestrator(object):
                 security_groups=self.security_groups,
                 userdata=self.userdata)
             self._worker_ids.append(worker.id)
-            print 'name %s is being created' % worker.name
+            print "Create %s" % worker
 
         print ('wait at most %s seconds for servers to be ready (ssh-able)' %
                self.timeout)
@@ -253,6 +253,7 @@ class Orchestrator(object):
         floating_ip = self.client.floating_ips.create()
         self.client.servers.add_floating_ip(self._gateway_id, floating_ip)
         self._gateway_floating_ip = floating_ip
+        print "Create and associate %s" % floating_ip
 
     def _get_server_info(self, _id):
         """
