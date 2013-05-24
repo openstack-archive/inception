@@ -305,6 +305,8 @@ class Orchestrator(object):
                                               "agent_forwarding": True})
             threads.append(thread)
         self._run_threads(threads)
+        # run an empty list to make sure attributes are properly propagated
+        self._run_chef_client(ipaddrs)
 
     def _deploy_network_vxlan(self):
         """
