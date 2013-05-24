@@ -389,11 +389,17 @@ class Orchestrator(object):
         """
         deploy OpenStack controller(s) via misc cookbooks
         """
+        self._add_run_list([self._controller_name], "role[os-dev-mode]")
+        self._add_run_list([self._controller_name], "role[os-controller-combined]")
+        self._run_chef_client([self._controller_ip])
 
     def _setup_workers(self):
         """
         deploy workers via misc cookbooks
         """
+        self._add_run_list(self._worker_names, "role[os-dev-mode]")
+        self._add_run_list(self._worker_names, "role[os-worker-combined]")
+        self._run_chef_client(self._worker_ips)
 
     def cleanup(self):
         """
