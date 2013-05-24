@@ -25,6 +25,7 @@ developer/user
 
 import getopt
 import os
+import Queue
 import sys
 import threading
 import time
@@ -47,7 +48,7 @@ class Orchestrator(object):
                  num_workers,
                  chef_repo,
                  chef_repo_branch,
-                 sequential,
+                 parallel,
                  user='ubuntu',
                  image='38b0b5a5-7dda-4fd1-b53a-00ba47eacc16',
                  flavor=3,
@@ -64,8 +65,8 @@ class Orchestrator(object):
         @param num_workers: how many worker nodes you'd like
         @param chef_repo: chef repository location
         @param chef_repo_branch: which branch to use in repo
-        @param sequential: whether run threads in sequential or parallel
-            (for accelerating)
+        @param parallel: whether run functions in parallel (via threads, for
+            accelerating) or sequential
         @param user: username (with root permission) for all servers
         @param image: default u1204-130529-gvc
         @param flavor: default medium
@@ -92,7 +93,7 @@ class Orchestrator(object):
         self.num_workers = num_workers
         self.chef_repo = chef_repo
         self.chef_repo_branch = chef_repo_branch
-        self.sequential = sequential
+        self.parallel = parallel
         self.user = user
         self.image = image
         self.flavor = flavor
@@ -293,7 +294,7 @@ class Orchestrator(object):
         check-in all VMs into chefserver (knife bootstrap), and set their
         environment to be self.prefix
         """
-        threads = []
+        funcs = []
         ipaddrs = ([self._chefserver_ip, self._gateway_ip,
                     self._controller_ip] + self._worker_ips)
         hostnames = ([self._chefserver_name, self._gateway_name,
@@ -302,12 +303,12 @@ class Orchestrator(object):
             uri = self.user + '@' + self._chefserver_ip
             command = ('/usr/bin/knife bootstrap %s -x %s -N %s -E %s --sudo'
                        % (ipaddr, self.user, hostname, self.prefix))
-            thread = threading.Thread(target=cmd.ssh,
-                                      args=(uri, command),
-                                      kwargs={"screen_output": True,
-                                              "agent_forwarding": True})
-            threads.append(thread)
-        self._run_threads(threads)
+            func = Func(target=cmd.ssh,
+                        args=(uri, command),
+                        kwargs={"screen_output": True,
+                                "agent_forwarding": True})
+            funcs.append(func)
+        self._execute_funcs(funcs)
         # run an empty list to make sure attributes are properly propagated
         self._run_chef_client(ipaddrs)
 
@@ -344,17 +345,17 @@ class Orchestrator(object):
         @param hostnames: hostnames of specified servers
         @param item: name of the item (e.g., recipe, role, etc)
         """
-        threads = []
+        funcs = []
         for hostname in hostnames:
             uri = self.user + '@' + self._chefserver_ip
             command = "/usr/bin/knife node run_list add %s %s" % (
                 hostname, item)
-            thread = threading.Thread(target=cmd.ssh,
-                                      args=(uri, command),
-                                      kwargs={"screen_output": True,
-                                              "agent_forwarding": True})
-            threads.append(thread)
-        self._run_threads(threads)
+            func = Func(target=cmd.ssh,
+                        args=(uri, command),
+                        kwargs={"screen_output": True,
+                                "agent_forwarding": True})
+            funcs.append(func)
+        self._execute_funcs(funcs)
 
     def _run_chef_client(self, ipaddrs):
         """
@@ -363,32 +364,46 @@ class Orchestrator(object):
 
         @param param: ip addresses of the servers
         """
-        threads = []
+        funcs = []
         for ipaddr in ipaddrs:
             uri = self.user + '@' + ipaddr
             command = "sudo chef-client"
-            thread = threading.Thread(target=cmd.ssh,
-                                      args=(uri, command),
-                                      kwargs={"screen_output": True,
-                                              "agent_forwarding": True})
-            threads.append(thread)
-        self._run_threads(threads)
+            func = Func(target=cmd.ssh,
+                        args=(uri, command),
+                        kwargs={"screen_output": True,
+                                "agent_forwarding": True})
+            funcs.append(func)
+        self._execute_funcs(funcs)
 
-    def _run_threads(self, threads):
+    def _execute_funcs(self, funcs):
         """
-        run threads, whether in a sequential or parallel way
+        Execute functions, whether in parallel (via threads) or sequential.
+            If parallel, exceptions of subthreads will be collected in a queue,
+            and an exception will raised in main thread later
 
-        @param threads: the threads to be run
+        @param funcs: the functions to be executed
         """
-        if self.sequential:
-            for thread in threads:
-                thread.start()
-                thread.join()
+        if not self.parallel:
+            for func in funcs:
+                func()
         else:
-            for thread in threads:
+            exception_queue = Queue.Queue()
+            threads = []
+            # create and start all threads
+            for func in funcs:
+                thread = FuncThread(func, exception_queue)
+                threads.append(thread)
                 thread.start()
+            # wait for all threads to finish
             for thread in threads:
                 thread.join()
+            # check whether got exception in threads
+            got_exception = not exception_queue.empty()
+            while not exception_queue.empty():
+                thread_name, func, info = exception_queue.get()
+                print thread_name, func, info
+            if got_exception:
+                raise RuntimeError("One or more subthreads got exception")
 
     def _setup_controller(self):
         """
@@ -446,6 +461,45 @@ class Orchestrator(object):
         print "Inception cloud '%s' has been cleaned up." % self.prefix
 
 
+class Func(object):
+    """
+    a wrapper of function call
+    """
+
+    def __init__(self, target, args, kwargs):
+        self._target = target
+        self._args = args
+        self._kwargs = kwargs
+
+    def __call__(self):
+        """
+        call my function
+        """
+        self._target(*self._args, **self._kwargs)
+
+
+class FuncThread(threading.Thread):
+    """
+    thread of calling a function, based on the regular thread by adding
+    a exception queue
+    """
+    def __init__(self, func, exception_queue):
+        threading.Thread.__init__(self)
+        self._func = func
+        self._exception_queue = exception_queue
+
+    def run(self):
+        """
+        Call the function, and put exception in queue if any
+        """
+        try:
+            self._func()
+        except Exception:
+            print self.name, self._func, traceback.format_exc()
+            self._exception_queue.put((self.name, self._func,
+                                       traceback.format_exc()))
+
+
 def main():
     """
     program starting point
@@ -455,10 +509,10 @@ def main():
     cleanup = False
     chef_repo = "git://github.com/maoy/inception-chef-repo.git"
     chef_repo_branch = "master"
-    sequential = False
+    parallel = False
     try:
         optlist, _ = getopt.getopt(sys.argv[1:], 'p:n:',
-                                   ["shell", "atomic", "cleanup", "sequential",
+                                   ["shell", "atomic", "cleanup", "parallel",
                                     "chef-repo=", "chef-repo-branch="])
         optdict = dict(optlist)
         prefix = optdict['-p']
@@ -473,14 +527,14 @@ def main():
             chef_repo = optdict["--chef-repo"]
         if "--chef-repo-branch" in optdict:
             chef_repo_branch = optdict["--chef-repo-branch"]
-        if "--sequential" in optdict:
-            sequential = True
+        if "--parallel" in optdict:
+            parallel = True
     except Exception:
         print traceback.format_exc()
         usage()
         sys.exit(1)
     orchestrator = Orchestrator(prefix, num_workers, chef_repo,
-                                chef_repo_branch, sequential)
+                                chef_repo_branch, parallel)
     if shell:
         # give me a ipython shell
         IPython.embed()
@@ -494,7 +548,7 @@ def main():
 def usage():
     print """
 python %s -p <prefix> -n <num_workers> [--shell] [--atomic] [--cleanup]
-  [--sequential] [--chef-repo=git://github.com/maoy/inception-chef-repo.git]
+  [--parallel] [--chef-repo=git://github.com/maoy/inception-chef-repo.git]
   [--chef-repo-branch=master]
 
 Note: make sure OpenStack-related environment variables are defined.
