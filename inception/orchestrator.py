@@ -81,8 +81,6 @@ class Orchestrator(object):
             path
         @param userdata: a bash script to be executed by cloud-init (in late
             booting stage, rc.local-like)
-        @param chefserver_files: scripts to run on chefserver. Scripts will
-            be executed one by one, so sequence matters
         @param timeout: sleep time (s) for servers to be launched
         @param poll_interval: every this time poll to check whether a server
             has finished launching, i.e., ssh-able
@@ -109,14 +107,26 @@ class Orchestrator(object):
         self.dst_dir = os.path.abspath(dst_dir)
         with open(os.path.join(self.src_dir, userdata), 'r') as fin:
             self.userdata = fin.read()
-        self.chefserver_files = OrderedDict()
-        for filename in chefserver_files:
-            with open(os.path.join(self.src_dir, filename), 'r') as fin:
-                value = fin.read()
-                key = os.path.join(self.dst_dir, filename)
-                self.chefserver_files[key] = value
         self.timeout = timeout
         self.poll_interval = poll_interval
+        # scripts to run on chefserver, execute one by one (sequence matters)
+        self.chefserver_commands = []
+        self.chefserver_files = OrderedDict()
+        for filename in ('install_chefserver.sh', 'configure_knife.sh',
+                         'setup_chef_repo.sh'):
+            src_file = os.path.join(self.src_dir, filename)
+            dst_file = os.path.join(self.dst_dir, filename)
+            if filename == 'setup_chef_repo.sh':
+                # add two args to this command
+                command = ("/bin/bash" + " " + dst_file + " " +
+                           self.chef_repo + " " + self.chef_repo_branch)
+            else:
+                command = "/bin/bash" + " " + dst_file
+            self.chefserver_commands.append(command)
+            with open(src_file, 'r') as fin:
+                value = fin.read()
+                key = dst_file
+                self.chefserver_files[key] = value
         ## non-args
         self.client = Client(os.environ['OS_USERNAME'],
                              os.environ['OS_PASSWORD'],
@@ -277,13 +287,9 @@ class Orchestrator(object):
         execute uploaded scripts to install chef, config knife, upload
         cookbooks, roles, and environments
         """
-        def ssh_chefserver(command):
-            return cmd.ssh(self.user + "@" + self._chefserver_ip,
-                           "/bin/bash " + command, screen_output=True)
-        ssh_chefserver('install_chefserver.sh')
-        ssh_chefserver('configure_knife.sh')
-        ssh_chefserver('setup_chef_repo.sh %s %s'
-                       % (self.chef_repo, self.chef_repo_branch))
+        for command in self.chefserver_commands:
+            cmd.ssh(self.user + "@" + self._chefserver_ip,
+                    command, screen_output=True)
 
     def _checkin_chefserver(self):
         """
