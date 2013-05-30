@@ -60,7 +60,7 @@ class Orchestrator(object):
                  chefserver_files=('install_chefserver.sh',
                                    'configure_knife.sh',
                                    'setup_chef_repo.sh'),
-                 timeout=90,
+                 timeout=999999,
                  poll_interval=5):
         """
         @param prefix: unique name as prefix
