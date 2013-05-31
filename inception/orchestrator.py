@@ -49,8 +49,8 @@ class Orchestrator(object):
                  chef_repo_branch,
                  sequential,
                  user='ubuntu',
-                 image='38b0b5a5-7dda-4fd1-b53a-00ba47eacc16',
-                 flavor=3,
+                 image='befe3cc7-c448-43bf-8a24-b05ba2247835',
+                 flavor=4,
                  gateway_flavor=1,
                  key_name='shared',
                  security_groups=('default', 'ssh'),
@@ -68,7 +68,7 @@ class Orchestrator(object):
             (for accelerating)
         @param user: username (with root permission) for all servers
         @param image: default u1204-130529-gvc
-        @param flavor: default medium
+        @param flavor: default large
         @param gateway_flavor: default tiny
         @param key_name: ssh public key to be injected
         @param security_groups:
