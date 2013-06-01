@@ -159,8 +159,8 @@ class Orchestrator(object):
             self._checkin_chefserver()
             self._deploy_network_vxlan()
             self._deploy_dnsmasq()
-            self._setup_controller()
-            self._setup_workers()
+            #self._setup_controller()
+            #self._setup_workers()
             print "Your inception cloud '%s' is ready!!!" % self.prefix
             print "Gateway IP is %s" % self._gateway_floating_ip.ip
             print "Chef server WebUI is http://%s:4040" % self._chefserver_ip
