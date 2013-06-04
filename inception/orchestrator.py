@@ -51,7 +51,7 @@ class Orchestrator(object):
                  chef_repo_branch,
                  parallel,
                  user='ubuntu',
-                 image='befe3cc7-c448-43bf-8a24-b05ba2247835',
+                 image='e3e344dd-9b8d-4f38-b5a9-222c8be40a7a',
                  flavor=4,
                  gateway_flavor=1,
                  key_name='shared',
@@ -69,7 +69,7 @@ class Orchestrator(object):
         @param parallel: whether run functions in parallel (via threads, for
             accelerating) or sequential
         @param user: username (with root permission) for all servers
-        @param image: default u1204-130529-gvc
+        @param image: default u1204-130531-gv
         @param flavor: default large
         @param gateway_flavor: default tiny
         @param key_name: ssh public key to be injected
