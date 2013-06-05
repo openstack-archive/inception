@@ -8,4 +8,4 @@ sudo parted /dev/vdb --script -- mkpart primary ext4 1 -1
 sudo parted /dev/vdb --script -- set 1 lvm on
 
 # use dnsmasq (fixed resolv.conf) instead
-sudo apt-get -y remove resolvconf
+sudo apt-get -y remove resolvconf || true
