@@ -61,7 +61,8 @@ class Orchestrator(object):
                  dst_dir='/home/ubuntu/',
                  userdata='userdata.sh',
                  timeout=999999,
-                 poll_interval=5):
+                 poll_interval=5,
+                 ssh_keyfile=None):
         """
         @param prefix: unique name as prefix
         @param num_workers: how many worker nodes you'd like
@@ -84,6 +85,7 @@ class Orchestrator(object):
         @param timeout: sleep time (s) for servers to be launched
         @param poll_interval: every this time poll to check whether a server
             has finished launching, i.e., ssh-able + userdata done
+        @param ssh_keyfile: extra ssh public key to login ubuntu account
         """
         ## check args
         if num_workers > 5:
@@ -107,6 +109,17 @@ class Orchestrator(object):
         self.dst_dir = os.path.abspath(dst_dir)
         with open(os.path.join(self.src_dir, userdata), 'r') as fin:
             self.userdata = fin.read()
+            inject_script = ""
+            if ssh_keyfile:
+                # Inject the extra ssh public key
+                with open(ssh_keyfile, "r") as keyfile:
+                    key_content = keyfile.read()
+                    inject_script = """
+cat >> /home/%s/.ssh/authorized_keys < EOF
+%s
+EOF
+""" % (user, key_content)
+        self.userdata += inject_script
         self.timeout = timeout
         self.poll_interval = poll_interval
         # scripts to run on chefserver, execute one by one (sequence matters)
@@ -498,7 +511,8 @@ def main():
     try:
         optlist, _ = getopt.getopt(sys.argv[1:], 'p:n:',
                                    ["shell", "atomic", "cleanup", "parallel",
-                                    "chef-repo=", "chef-repo-branch="])
+                                    "chef-repo=", "chef-repo-branch=",
+                                    "ssh-keyfile="])
         optdict = dict(optlist)
         prefix = optdict['-p']
         num_workers = int(optdict['-n'])
@@ -514,12 +528,14 @@ def main():
             chef_repo_branch = optdict["--chef-repo-branch"]
         if "--parallel" in optdict:
             parallel = True
+        ssh_keyfile = optdict.get("--ssh-keyfile", None)
     except Exception:
         print traceback.format_exc()
         usage()
         sys.exit(1)
     orchestrator = Orchestrator(prefix, num_workers, chef_repo,
-                                chef_repo_branch, parallel)
+                                chef_repo_branch, parallel,
+                                ssh_keyfile=ssh_keyfile)
     if shell:
         # give me a ipython shell
         IPython.embed()
@@ -534,7 +550,7 @@ def usage():
     print """
 python %s -p <prefix> -n <num_workers> [--shell] [--atomic] [--cleanup]
   [--parallel] [--chef-repo=git://github.com/maoy/inception-chef-repo.git]
-  [--chef-repo-branch=master]
+  [--chef-repo-branch=master] [--ssh-keyfile=/path/to/key]
 
 Note: make sure OpenStack-related environment variables are defined.
 """ % (__file__,)
