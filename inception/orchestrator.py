@@ -242,6 +242,9 @@ class Orchestrator(object):
                     self._get_server_info(self._chefserver_id))
                 (self._controller_ip, self._controller_name) = (
                     self._get_server_info(self._controller_id))
+                # clear content upon each time retry
+                self._worker_ips = []
+                self._worker_names = []
                 for _id in self._worker_ids:
                     (ipaddr, name) = self._get_server_info(_id)
                     self._worker_ips.append(ipaddr)
