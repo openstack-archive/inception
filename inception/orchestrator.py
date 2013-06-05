@@ -51,7 +51,7 @@ class Orchestrator(object):
                  chef_repo_branch,
                  parallel,
                  user='ubuntu',
-                 image='e3e344dd-9b8d-4f38-b5a9-222c8be40a7a',
+                 image='8e446e6a-3ea4-4908-bd12-4d0e691f37f7',
                  flavor=4,
                  gateway_flavor=1,
                  key_name='shared',
