@@ -10,3 +10,8 @@ sudo parted /dev/vdb --script -- set 1 lvm on
 
 # use dnsmasq (fixed resolv.conf) instead
 sudo apt-get -y remove resolvconf || true
+
+# shorten sleep time of failsafe and cloud-init-nonet
+sudo sed -i -e 's/sleep\ 20/sleep\ 1/g' -e 's/sleep\ 40/sleep\ 1/g' \
+	-e 's/sleep\ 59/sleep\ 1/g' /etc/init/failsafe.conf
+sudo sed -i 's/long=120/long=20/g' /etc/init/cloud-init-nonet.conf
