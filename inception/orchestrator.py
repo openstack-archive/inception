@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 """
-- Networks:
+TODOS
 
+Networks:
 (use /24 address for now (faster OpenStack deployment), increase to /16 later)
 
 eth0, management: inherent interface on each rVM
@@ -16,7 +17,7 @@ rVMs eth1 IPs
 [prefix]-worker-1, 10.251.1.1
 [prefix]-worker-2(s), 10.251.1.2 [ - 10.251.255.254] # maximum ~65000
 
-webui: end-user input: (1) # of workers (default 2), (2) ssh_public_key
+WebUI: Horizon-based
 
 templatize all templatable configurations (environments, roles, etc), put the
 rest (sensitive data) in a private configuration file specific to each
@@ -51,6 +52,7 @@ class Orchestrator(object):
                  chef_repo,
                  chef_repo_branch,
                  parallel,
+                 ssh_keyfile=None,
                  user='ubuntu',
                  image='8e446e6a-3ea4-4908-bd12-4d0e691f37f7',
                  flavor=4,
@@ -59,10 +61,9 @@ class Orchestrator(object):
                  security_groups=('default', 'ssh'),
                  src_dir='../bin/',
                  dst_dir='/home/ubuntu/',
-                 userdata='userdata.sh',
+                 userdata='userdata.sh.template',
                  timeout=999999,
-                 poll_interval=5,
-                 ssh_keyfile=None):
+                 poll_interval=5):
         """
         @param prefix: unique name as prefix
         @param num_workers: how many worker nodes you'd like
@@ -70,6 +71,7 @@ class Orchestrator(object):
         @param chef_repo_branch: which branch to use in repo
         @param parallel: whether run functions in parallel (via threads, for
             accelerating) or sequential
+        @param ssh_keyfile: extra ssh public key to login user account
         @param user: username (with root permission) for all servers
         @param image: default u1204-130531-gv
         @param flavor: default large
@@ -85,7 +87,6 @@ class Orchestrator(object):
         @param timeout: sleep time (s) for servers to be launched
         @param poll_interval: every this time poll to check whether a server
             has finished launching, i.e., ssh-able + userdata done
-        @param ssh_keyfile: extra ssh public key to login ubuntu account
         """
         ## check args
         if num_workers > 5:
@@ -109,17 +110,12 @@ class Orchestrator(object):
         self.dst_dir = os.path.abspath(dst_dir)
         with open(os.path.join(self.src_dir, userdata), 'r') as fin:
             self.userdata = fin.read()
-            inject_script = ""
-            if ssh_keyfile:
-                # Inject the extra ssh public key
-                with open(ssh_keyfile, "r") as keyfile:
-                    key_content = keyfile.read()
-                    inject_script = """
-cat >> /home/%s/.ssh/authorized_keys < EOF
-%s
-EOF
-""" % (user, key_content)
-        self.userdata += inject_script
+        # Inject the extra ssh public key if any
+        ssh_keycontent = ''
+        if ssh_keyfile:
+            with open(ssh_keyfile, 'r') as fin:
+                ssh_keycontent = fin.read()
+        self.userdata = self.userdata % (user, ssh_keycontent)
         self.timeout = timeout
         self.poll_interval = poll_interval
         # scripts to run on chefserver, execute one by one (sequence matters)
@@ -502,12 +498,14 @@ def main():
     """
     program starting point
     """
+    # default argument values
     shell = False
     atomic = False
     cleanup = False
     chef_repo = "git://github.com/maoy/inception-chef-repo.git"
     chef_repo_branch = "master"
     parallel = False
+    ssh_keyfile = None
     try:
         optlist, _ = getopt.getopt(sys.argv[1:], 'p:n:',
                                    ["shell", "atomic", "cleanup", "parallel",
@@ -528,14 +526,14 @@ def main():
             chef_repo_branch = optdict["--chef-repo-branch"]
         if "--parallel" in optdict:
             parallel = True
-        ssh_keyfile = optdict.get("--ssh-keyfile", None)
+        if "--ssh-keyfile" in optdict:
+            ssh_keyfile = optdict["--ssh-keyfile"]
     except Exception:
         print traceback.format_exc()
         usage()
         sys.exit(1)
     orchestrator = Orchestrator(prefix, num_workers, chef_repo,
-                                chef_repo_branch, parallel,
-                                ssh_keyfile=ssh_keyfile)
+                                chef_repo_branch, parallel, ssh_keyfile)
     if shell:
         # give me a ipython shell
         IPython.embed()
