@@ -16,5 +16,10 @@ sudo sed -i -e 's/sleep\ 20/sleep\ 1/g' -e 's/sleep\ 40/sleep\ 1/g' \
 	-e 's/sleep\ 59/sleep\ 1/g' /etc/init/failsafe.conf
 sudo sed -i 's/long=120/long=20/g' /etc/init/cloud-init-nonet.conf
 
+# template_str, two args are (user, ssh_keycontent) 
+cat >> /home/%s/.ssh/authorized_keys <<EOF
+%s
+EOF
+
 # create a folder to indicate userdata done
 sudo mkdir -p /etc/inception/
