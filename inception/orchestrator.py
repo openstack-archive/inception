@@ -27,6 +27,7 @@ import getopt
 import functools
 import os
 import Queue
+import subprocess
 import sys
 import threading
 import time
@@ -82,7 +83,7 @@ class Orchestrator(object):
             booting stage, rc.local-like)
         @param timeout: sleep time (s) for servers to be launched
         @param poll_interval: every this time poll to check whether a server
-            has finished launching, i.e., ssh-able
+            has finished launching, i.e., ssh-able + userdata done
         """
         ## check args
         if num_workers > 5:
@@ -229,8 +230,8 @@ class Orchestrator(object):
             self._worker_ids.append(worker.id)
             print "Creating %s" % worker
 
-        print ('wait at most %s seconds for servers to be ready (ssh-able)' %
-               self.timeout)
+        print ('wait at most %s seconds for servers to be ready (ssh-able + '
+               'userdata done)' % self.timeout)
         servers_ready = False
         begin_time = time.time()
         while time.time() - begin_time <= self.timeout:
@@ -250,15 +251,16 @@ class Orchestrator(object):
                     self._worker_ips.append(ipaddr)
                     self._worker_names.append(name)
                 # test ssh-able
-                cmd.ssh(self.user + "@" + self._gateway_ip, 'true')
-                cmd.ssh(self.user + "@" + self._chefserver_ip, 'true')
-                cmd.ssh(self.user + "@" + self._controller_ip, 'true')
+                command = '[ -d /etc/inception ]'
+                cmd.ssh(self.user + "@" + self._gateway_ip, command)
+                cmd.ssh(self.user + "@" + self._chefserver_ip, command)
+                cmd.ssh(self.user + "@" + self._controller_ip, command)
                 for worker_ip in self._worker_ips:
-                    cmd.ssh(self.user + "@" + worker_ip, 'true')
+                    cmd.ssh(self.user + "@" + worker_ip, command)
                 # indicate that servers are ready
                 servers_ready = True
                 break
-            except (cmd.SshConnectionError, UnboundLocalError) as error:
+            except (UnboundLocalError, subprocess.CalledProcessError) as error:
                 print ('servers are not all ready, error=%s, sleep %s seconds'
                        % (error, self.poll_interval))
                 time.sleep(self.poll_interval)
