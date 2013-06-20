@@ -53,6 +53,7 @@ class Orchestrator(object):
                  chef_repo_branch,
                  parallel,
                  ssh_keyfile=None,
+                 pool='nova',
                  user='ubuntu',
                  image='8e446e6a-3ea4-4908-bd12-4d0e691f37f7',
                  flavor=4,
@@ -72,12 +73,13 @@ class Orchestrator(object):
         @param parallel: whether run functions in parallel (via threads, for
             accelerating) or sequential
         @param ssh_keyfile: extra ssh public key to login user account
+        @param pool: floating ip pool
         @param user: username (with root permission) for all servers
         @param image: default u1204-130531-gv
         @param flavor: default large
         @param gateway_flavor: default tiny
         @param key_name: ssh public key to be injected
-        @param security_groups:
+        @param security_groups: firewall rules
         @param src_dir: location from where scripts are uploaded to servers.
             Relative path to __file__
         @param dst_dir: target location of scripts on servers. Must be absolte
@@ -99,6 +101,7 @@ class Orchestrator(object):
         self.chef_repo = chef_repo
         self.chef_repo_branch = chef_repo_branch
         self.parallel = parallel
+        self.pool = pool
         self.user = user
         self.image = image
         self.flavor = flavor
@@ -278,7 +281,7 @@ class Orchestrator(object):
             raise RuntimeError("No all servers can be brought up")
 
         # create a public IP and associate it to gateway
-        floating_ip = self.client.floating_ips.create()
+        floating_ip = self.client.floating_ips.create(pool=self.pool)
         self.client.servers.add_floating_ip(self._gateway_id, floating_ip)
         self._gateway_floating_ip = floating_ip
         print "Creating and associating %s" % floating_ip
@@ -506,11 +509,12 @@ def main():
     chef_repo_branch = "master"
     parallel = False
     ssh_keyfile = None
+    pool = 'nova'
     try:
         optlist, _ = getopt.getopt(sys.argv[1:], 'p:n:',
                                    ["shell", "atomic", "cleanup", "parallel",
                                     "chef-repo=", "chef-repo-branch=",
-                                    "ssh-keyfile="])
+                                    "ssh-keyfile=", 'pool='])
         optdict = dict(optlist)
         prefix = optdict['-p']
         num_workers = int(optdict['-n'])
@@ -528,12 +532,14 @@ def main():
             parallel = True
         if "--ssh-keyfile" in optdict:
             ssh_keyfile = optdict["--ssh-keyfile"]
+        if "--pool" in optdict:
+            pool = optdict["--pool"]
     except Exception:
         print traceback.format_exc()
         usage()
         sys.exit(1)
     orchestrator = Orchestrator(prefix, num_workers, chef_repo,
-                                chef_repo_branch, parallel, ssh_keyfile)
+                                chef_repo_branch, parallel, ssh_keyfile, pool)
     if shell:
         # give me a ipython shell
         IPython.embed()
@@ -548,7 +554,7 @@ def usage():
     print """
 python %s -p <prefix> -n <num_workers> [--shell] [--atomic] [--cleanup]
   [--parallel] [--chef-repo=git://github.com/maoy/inception-chef-repo.git]
-  [--chef-repo-branch=master] [--ssh-keyfile=/path/to/key]
+  [--chef-repo-branch=master] [--ssh-keyfile=/path/to/key] [--pool=nova]
 
 Note: make sure OpenStack-related environment variables are defined.
 """ % (__file__,)
