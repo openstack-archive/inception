@@ -327,6 +327,8 @@ class Orchestrator(object):
         self._execute_funcs(funcs)
         # run an empty list to make sure attributes are properly propagated
         self._run_chef_client(ipaddrs)
+        # sleep some time
+        time.sleep(5)
 
     def _deploy_network_vxlan(self):
         """

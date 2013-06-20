@@ -10,6 +10,8 @@ sudo apt-get -y upgrade
 # install generic and reomve virtual kernel
 sudo apt-get -y install linux-generic
 sudo apt-get -y purge linux-virtual
+sudo apt-get -y purge linux-image-`uname -r`
+sudo apt-get -y purge linux-headers-`uname -r`
 
 # cleanup
 sudo apt-get -y autoremove
