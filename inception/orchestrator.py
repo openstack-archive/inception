@@ -53,10 +53,10 @@ class Orchestrator(object):
                  chef_repo_branch,
                  parallel,
                  ssh_keyfile=None,
-                 pool='nova',
+                 pool='research',
                  user='ubuntu',
-                 image='8e446e6a-3ea4-4908-bd12-4d0e691f37f7',
-                 flavor=4,
+                 image='f3d62d5b-a76b-4997-a579-ff946a606132',
+                 flavor=3,
                  gateway_flavor=1,
                  key_name='shared',
                  security_groups=('default', 'ssh'),
@@ -511,7 +511,7 @@ def main():
     chef_repo_branch = "master"
     parallel = False
     ssh_keyfile = None
-    pool = 'nova'
+    pool = 'research'
     try:
         optlist, _ = getopt.getopt(sys.argv[1:], 'p:n:',
                                    ["shell", "atomic", "cleanup", "parallel",
