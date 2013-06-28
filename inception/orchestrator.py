@@ -25,8 +25,9 @@ rest (sensitive data) in a private configuration file specific to each
 developer/user
 """
 
-import getopt
+from collections import OrderedDict
 import functools
+import getopt
 import os
 import Queue
 import subprocess
@@ -34,7 +35,6 @@ import sys
 import threading
 import time
 import traceback
-from collections import OrderedDict
 
 import IPython
 from novaclient.v1_1.client import Client
