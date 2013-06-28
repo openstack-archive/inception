@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 """
-TODOS
-
+#TODO(changbl)
 Networks:
 (use /24 address for now (faster OpenStack deployment), increase to /16 later)
 
@@ -17,8 +16,10 @@ rVMs eth1 IPs
 [prefix]-worker-1, 10.251.1.1
 [prefix]-worker-2(s), 10.251.1.2 [ - 10.251.255.254] # maximum ~65000
 
+#TODO(to-be-assigned)
 WebUI: Horizon-based
 
+#TODO(to-be-assigned)
 templatize all templatable configurations (environments, roles, etc), put the
 rest (sensitive data) in a private configuration file specific to each
 developer/user
@@ -76,7 +77,7 @@ class Orchestrator(object):
         @param pool: floating ip pool
         @param user: username (with root permission) for all servers
         @param image: default u1204-130531-gv
-        @param flavor: default large
+        @param flavor: default medium
         @param gateway_flavor: default tiny
         @param key_name: ssh public key to be injected
         @param security_groups: firewall rules
@@ -91,8 +92,11 @@ class Orchestrator(object):
             has finished launching, i.e., ssh-able + userdata done
         """
         ## check args
+        #TODO(changbl): remove the restriction of "num_workers <= 5"
         if num_workers > 5:
             raise ValueError("currently only supports num_workers <= 5")
+        #TODO(changbl): make separator '-' a constant and accessible
+        #everywhere
         if '-' in prefix:
             raise ValueError('"-" cannot exist in prefix=%r' % prefix)
         ## args
@@ -391,9 +395,10 @@ class Orchestrator(object):
 
     def _execute_funcs(self, funcs):
         """
-        Execute functions, whether in parallel (via threads) or sequential.
-            If parallel, exceptions of subthreads will be collected in a queue,
-            and an exception will raised in main thread later
+        Execute functions, whether in parallel (via threads) or
+            sequential.  If parallel, exceptions of subthreads will be
+            collected in a shared queue, and an exception will raised
+            in main thread later
 
         @param funcs: the functions to be executed
         """
@@ -477,8 +482,8 @@ class Orchestrator(object):
 
 class FuncThread(threading.Thread):
     """
-    thread of calling a partial function, based on the regular thread by adding
-    a exception queue
+    thread of calling a partial function, based on the regular thread
+    by adding a shared-with-others exception queue
     """
     def __init__(self, func, exception_queue):
         threading.Thread.__init__(self)
