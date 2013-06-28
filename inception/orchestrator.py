@@ -38,8 +38,89 @@ import traceback
 
 import IPython
 from novaclient.v1_1.client import Client
+from oslo.config import cfg
 
 from inception.utils import cmd
+
+CONF = cfg.CONF
+
+cli_opts = [
+    cfg.StrOpt('prefix',
+               default=None,
+               metavar='PREFIX',
+               required=True,
+               short='p',
+               help='(unique) prefix for node names (no hyphens allowed)'),
+    cfg.IntOpt('num_workers',
+               default=2,
+               metavar='NUM',
+               short='n',
+               help='number of worker nodes to create'),
+    cfg.BoolOpt('shell',
+                default=False,
+                help='initialize, then drop to embedded IPython shell'),
+    cfg.BoolOpt('atomic',
+                default=False,
+                help='on error, run as if --cleanup was specified'),
+    cfg.BoolOpt('cleanup',
+                default=False,
+                help='take down the inception cloud'),
+    cfg.BoolOpt('parallel',
+                default=False,
+                help='execute chef-related setup tasks in parallel'),
+    cfg.StrOpt('chef_repo',
+               default='git://github.com/maoy/inception-chef-repo.git',
+               metavar='URL',
+               help='URL of Chef repo'),
+    cfg.StrOpt('chef_repo_branch',
+               default='master',
+               metavar='BRANCH',
+               help='name of branch of Chef repo to use'),
+    cfg.StrOpt('ssh_keyfile',
+               default=None,
+               metavar='PATH',
+               help='path of additional keyfile for node access via ssh'),
+    cfg.StrOpt('pool',
+               default='research',
+               help='name of pool for floating IP addresses'),
+]
+
+cfg_file_opts = [
+    cfg.StrOpt('user',
+               default='ubuntu',
+               help=''),
+    cfg.StrOpt('image',
+               default='f3d62d5b-a76b-4997-a579-ff946a606132',
+               help=''),
+    cfg.IntOpt('flavor',
+               default=3,
+               help='id of machine flavor used for nodes'),
+    cfg.IntOpt('gateway_flavor',
+               default=1,
+               help='id of machine flavor used for gateway'),
+    cfg.StrOpt('key_name',
+               default='af-keypair',
+#               default='shared',
+               help='name of key for node access via ssh'),
+    cfg.ListOpt('security_groups',
+                default=['default', 'ssh'],
+                help='list of security groups for nodes'),
+    cfg.StrOpt('src_dir',
+               default='../bin/',
+               help='path of setup script source dir on client'),
+    cfg.StrOpt('dst_dir',
+               default='/home/ubuntu/',
+               help='path of setup script destination dir on nodes'),
+    cfg.StrOpt('userdata',
+               default='userdata.sh.template',
+               help='template for user data script'),
+    cfg.IntOpt('timeout',
+               default=999999,
+               help='number of seconds for creation timeout'),
+    cfg.IntOpt('poll_interval',
+               default=5,
+               help='interval (in seconds) between readiness polls'),
+]
 
 
 class Orchestrator(object):
@@ -47,87 +128,45 @@ class Orchestrator(object):
     orchestrate all inception cloud stuff
     """
 
-    def __init__(self,
-                 prefix,
-                 num_workers,
-                 chef_repo,
-                 chef_repo_branch,
-                 parallel,
-                 ssh_keyfile=None,
-                 pool='research',
-                 user='ubuntu',
-                 image='f3d62d5b-a76b-4997-a579-ff946a606132',
-                 flavor=3,
-                 gateway_flavor=1,
-                 key_name='shared',
-                 security_groups=('default', 'ssh'),
-                 src_dir='../bin/',
-                 dst_dir='/home/ubuntu/',
-                 userdata='userdata.sh.template',
-                 timeout=999999,
-                 poll_interval=5):
+    def __init__(self, conf):
         """
-        @param prefix: unique name as prefix
-        @param num_workers: how many worker nodes you'd like
-        @param chef_repo: chef repository location
-        @param chef_repo_branch: which branch to use in repo
-        @param parallel: whether run functions in parallel (via threads, for
-            accelerating) or sequential
-        @param ssh_keyfile: extra ssh public key to login user account
-        @param pool: floating ip pool
-        @param user: username (with root permission) for all servers
-        @param image: default u1204-130531-gv
-        @param flavor: default medium
-        @param gateway_flavor: default tiny
-        @param key_name: ssh public key to be injected
-        @param security_groups: firewall rules
-        @param src_dir: location from where scripts are uploaded to servers.
-            Relative path to __file__
-        @param dst_dir: target location of scripts on servers. Must be absolte
-            path
-        @param userdata: a bash script to be executed by cloud-init (in late
-            booting stage, rc.local-like)
-        @param timeout: sleep time (s) for servers to be launched
-        @param poll_interval: every this time poll to check whether a server
-            has finished launching, i.e., ssh-able + userdata done
+        @param conf: instance of ConfigOpts() from oslo.config representing the
+            totality of configuration values from the defaults in this source,
+            the configuration file(s) (if any) and the command line
         """
-        ## check args
+
+        ## check config
         #TODO(changbl): remove the restriction of "num_workers <= 5"
-        if num_workers > 5:
+        if conf.num_workers > 5:
             raise ValueError("currently only supports num_workers <= 5")
         #TODO(changbl): make separator '-' a constant and accessible
         #everywhere
-        if '-' in prefix:
-            raise ValueError('"-" cannot exist in prefix=%r' % prefix)
-        ## args
-        self.prefix = prefix
-        self.num_workers = num_workers
-        self.chef_repo = chef_repo
-        self.chef_repo_branch = chef_repo_branch
-        self.parallel = parallel
-        self.pool = pool
-        self.user = user
-        self.image = image
-        self.flavor = flavor
-        self.gateway_flavor = gateway_flavor
-        self.key_name = key_name
-        self.security_groups = security_groups
-        self.src_dir = os.path.join(os.path.abspath(
-            os.path.dirname(__file__)), src_dir)
-        self.dst_dir = os.path.abspath(dst_dir)
-        with open(os.path.join(self.src_dir, userdata), 'r') as fin:
-            self.userdata = fin.read()
+        if '-' in conf.prefix:
+            raise ValueError('"-" cannot exist in prefix=%r' % conf.prefix)
+
+        # save configuration
+        self.conf = conf
+
+        # make src and dst dirs into absolute paths
+        self.src_dir = os.path.join(os.path.abspath(os.path.dirname(__file__)),
+                                    conf.src_dir)
+        self.dst_dir = os.path.abspath(conf.dst_dir)
+
+        # get the userdata
+        with open(os.path.join(self.src_dir, conf.userdata), 'r') as fin:
+            self._userdata = fin.read()
+
         # Inject the extra ssh public key if any
         ssh_keycontent = ''
-        if ssh_keyfile:
-            with open(ssh_keyfile, 'r') as fin:
+        if conf.ssh_keyfile:
+            with open(conf.ssh_keyfile, 'r') as fin:
                 ssh_keycontent = fin.read()
-        self.userdata = self.userdata % (user, ssh_keycontent)
-        self.timeout = timeout
-        self.poll_interval = poll_interval
+        self._userdata = self._userdata % (conf.user, ssh_keycontent)
+
         # scripts to run on chefserver, execute one by one (sequence matters)
         self.chefserver_commands = []
         self.chefserver_files = OrderedDict()
+
         for filename in ('install_chefserver.sh', 'configure_knife.sh',
                          'setup_chef_repo.sh'):
             src_file = os.path.join(self.src_dir, filename)
@@ -135,7 +174,8 @@ class Orchestrator(object):
             if filename == 'setup_chef_repo.sh':
                 # add two args to this command
                 command = ("/bin/bash" + " " + dst_file + " " +
-                           self.chef_repo + " " + self.chef_repo_branch)
+                           self.conf.chef_repo + " " +
+                           self.conf.chef_repo_branch)
             else:
                 command = "/bin/bash" + " " + dst_file
             self.chefserver_commands.append(command)
@@ -143,6 +183,7 @@ class Orchestrator(object):
                 value = fin.read()
                 key = dst_file
                 self.chefserver_files[key] = value
+
         ## non-args
         self.client = Client(os.environ['OS_USERNAME'],
                              os.environ['OS_PASSWORD'],
@@ -162,12 +203,9 @@ class Orchestrator(object):
         self._worker_names = []
         self._gateway_floating_ip = None
 
-    def start(self, atomic):
+    def start(self):
         """
         run the whole process
-
-        @param atomic: upon exception, whether rollback, i.e., auto delete all
-            created servers
         """
         try:
             self._check_existence()
@@ -178,22 +216,24 @@ class Orchestrator(object):
             self._deploy_dnsmasq()
             self._setup_controller()
             self._setup_workers()
-            print "Your inception cloud '%s' is ready!!!" % self.prefix
+            print "Your inception cloud '%s' is ready!!!" % self.conf.prefix
             print "Gateway IP is %s" % self._gateway_floating_ip.ip
             print "Chef server WebUI is http://%s:4040" % self._chefserver_ip
             print "OpenStack dashboard is https://%s" % self._controller_ip
         except Exception:
             print traceback.format_exc()
-            if atomic:
+            if self.conf.atomic:
                 self.cleanup()
 
     def _check_existence(self):
         """
         Check whether inception cloud existence based on given self.prefix
         """
+        prefix = self.conf.prefix + '-'
         for server in self.client.servers.list():
-            if '-' in server.name and server.name.split('-')[0] == self.prefix:
-                raise ValueError('prefix=%s is already used' % self.prefix)
+            if (server.name.startswith(prefix)):
+                raise ValueError('prefix=%s is already used' %
+                                 self.conf.prefix)
 
     def _create_servers(self):
         """
@@ -202,55 +242,55 @@ class Orchestrator(object):
         """
         # launch gateway
         gateway = self.client.servers.create(
-            name=self.prefix + '-gateway',
-            image=self.image,
-            flavor=self.gateway_flavor,
-            key_name=self.key_name,
-            security_groups=self.security_groups,
-            userdata=self.userdata)
+            name=self.conf.prefix + '-gateway',
+            image=self.conf.image,
+            flavor=self.conf.gateway_flavor,
+            key_name=self.conf.key_name,
+            security_groups=self.conf.security_groups,
+            userdata=self._userdata)
         self._gateway_id = gateway.id
         print "Creating %s" % gateway
 
         # launch chefserver
         chefserver = self.client.servers.create(
-            name=self.prefix + '-chefserver',
-            image=self.image,
-            flavor=self.flavor,
-            key_name=self.key_name,
-            security_groups=self.security_groups,
-            userdata=self.userdata,
+            name=self.conf.prefix + '-chefserver',
+            image=self.conf.image,
+            flavor=self.conf.flavor,
+            key_name=self.conf.key_name,
+            security_groups=self.conf.security_groups,
+            userdata=self._userdata,
             files=self.chefserver_files)
         self._chefserver_id = chefserver.id
         print "Creating %s" % chefserver
 
         # launch controller
         controller = self.client.servers.create(
-            name=self.prefix + '-controller',
-            image=self.image,
-            flavor=self.flavor,
-            key_name=self.key_name,
-            security_groups=self.security_groups,
-            userdata=self.userdata)
+            name=self.conf.prefix + '-controller',
+            image=self.conf.image,
+            flavor=self.conf.flavor,
+            key_name=self.conf.key_name,
+            security_groups=self.conf.security_groups,
+            userdata=self._userdata)
         self._controller_id = controller.id
         print "Creating %s" % controller
 
         # launch workers
-        for i in xrange(self.num_workers):
+        for i in xrange(self.conf.num_workers):
             worker = self.client.servers.create(
-                name=self.prefix + '-worker%s' % (i + 1),
-                image=self.image,
-                flavor=self.flavor,
-                key_name=self.key_name,
-                security_groups=self.security_groups,
-                userdata=self.userdata)
+                name=self.conf.prefix + '-worker%s' % (i + 1),
+                image=self.conf.image,
+                flavor=self.conf.flavor,
+                key_name=self.conf.key_name,
+                security_groups=self.conf.security_groups,
+                userdata=self._userdata)
             self._worker_ids.append(worker.id)
             print "Creating %s" % worker
 
         print ('wait at most %s seconds for servers to be ready (ssh-able + '
-               'userdata done)' % self.timeout)
+               'userdata done)' % self.conf.timeout)
         servers_ready = False
         begin_time = time.time()
-        while time.time() - begin_time <= self.timeout:
+        while time.time() - begin_time <= self.conf.timeout:
             try:
                 # get IP addr of servers
                 (self._gateway_ip, self._gateway_name) = self._get_server_info(
@@ -268,24 +308,24 @@ class Orchestrator(object):
                     self._worker_names.append(name)
                 # test ssh-able
                 command = '[ -d /etc/inception ]'
-                cmd.ssh(self.user + "@" + self._gateway_ip, command)
-                cmd.ssh(self.user + "@" + self._chefserver_ip, command)
-                cmd.ssh(self.user + "@" + self._controller_ip, command)
+                cmd.ssh(self.conf.user + "@" + self._gateway_ip, command)
+                cmd.ssh(self.conf.user + "@" + self._chefserver_ip, command)
+                cmd.ssh(self.conf.user + "@" + self._controller_ip, command)
                 for worker_ip in self._worker_ips:
-                    cmd.ssh(self.user + "@" + worker_ip, command)
+                    cmd.ssh(self.conf.user + "@" + worker_ip, command)
                 # indicate that servers are ready
                 servers_ready = True
                 break
             except (UnboundLocalError, subprocess.CalledProcessError) as error:
                 print ('servers are not all ready, error=%s, sleep %s seconds'
-                       % (error, self.poll_interval))
-                time.sleep(self.poll_interval)
+                       % (error, self.conf.poll_interval))
+                time.sleep(self.conf.poll_interval)
                 continue
         if not servers_ready:
-            raise RuntimeError("No all servers can be brought up")
+            raise RuntimeError("Not all servers can be brought up")
 
         # create a public IP and associate it to gateway
-        floating_ip = self.client.floating_ips.create(pool=self.pool)
+        floating_ip = self.client.floating_ips.create(pool=self.conf.pool)
         self.client.servers.add_floating_ip(self._gateway_id, floating_ip)
         self._gateway_floating_ip = floating_ip
         print "Creating and associating %s" % floating_ip
@@ -308,13 +348,13 @@ class Orchestrator(object):
         cookbooks, roles, and environments
         """
         for command in self.chefserver_commands:
-            cmd.ssh(self.user + "@" + self._chefserver_ip,
+            cmd.ssh(self.conf.user + "@" + self._chefserver_ip,
                     command, screen_output=True)
 
     def _checkin_chefserver(self):
         """
         check-in all VMs into chefserver (knife bootstrap), and set their
-        environment to be self.prefix
+        environment to be self.conf.prefix
         """
         funcs = []
         ipaddrs = ([self._chefserver_ip, self._gateway_ip,
@@ -322,9 +362,9 @@ class Orchestrator(object):
         hostnames = ([self._chefserver_name, self._gateway_name,
                       self._controller_name] + self._worker_names)
         for (ipaddr, hostname) in zip(ipaddrs, hostnames):
-            uri = self.user + '@' + self._chefserver_ip
+            uri = self.conf.user + '@' + self._chefserver_ip
             command = ('/usr/bin/knife bootstrap %s -x %s -N %s -E %s --sudo'
-                       % (ipaddr, self.user, hostname, self.prefix))
+                       % (ipaddr, self.conf.user, hostname, self.conf.prefix))
             func = functools.partial(cmd.ssh, uri, command, screen_output=True,
                                      agent_forwarding=True)
             funcs.append(func)
@@ -369,7 +409,7 @@ class Orchestrator(object):
         """
         funcs = []
         for hostname in hostnames:
-            uri = self.user + '@' + self._chefserver_ip
+            uri = self.conf.user + '@' + self._chefserver_ip
             command = "/usr/bin/knife node run_list add %s %s" % (
                 hostname, item)
             func = functools.partial(cmd.ssh, uri, command, screen_output=True,
@@ -386,7 +426,7 @@ class Orchestrator(object):
         """
         funcs = []
         for ipaddr in ipaddrs:
-            uri = self.user + '@' + ipaddr
+            uri = self.conf.user + '@' + ipaddr
             command = "sudo chef-client"
             func = functools.partial(cmd.ssh, uri, command, screen_output=True,
                                      agent_forwarding=True)
@@ -402,7 +442,7 @@ class Orchestrator(object):
 
         @param funcs: the functions to be executed
         """
-        if not self.parallel:
+        if not self.conf.parallel:
             for func in funcs:
                 func()
         else:
@@ -443,17 +483,18 @@ class Orchestrator(object):
 
     def cleanup(self):
         """
-        Clean up the whole inception cloud, based on self.prefix
+        Clean up the whole inception cloud, based on self.conf.prefix
         """
-        print "Let's clean up inception cloud '%s'..." % self.prefix
+        print "Let's clean up inception cloud '%s'..." % self.conf.prefix
         ## find out servers info
         servers = []
         gateway = None
         gateway_ip = None
+        prefix = self.conf.prefix + '-'
         for server in self.client.servers.list():
-            if '-' in server.name and server.name.split('-')[0] == self.prefix:
+            if (server.name.startswith(prefix)):
                 servers.append(server)
-            if server.name == self.prefix + '-gateway':
+            if server.name == self.conf.prefix + '-gateway':
                 gateway = server
                 # get ipaddress (there is only 1 item in the dict)
                 for key in gateway.networks:
@@ -477,7 +518,7 @@ class Orchestrator(object):
             except Exception:
                 print traceback.format_exc()
                 continue
-        print "Inception cloud '%s' has been cleaned up." % self.prefix
+        print "Inception cloud '%s' has been cleaned up." % self.conf.prefix
 
 
 class FuncThread(threading.Thread):
@@ -508,63 +549,30 @@ def main():
     """
     program starting point
     """
-    # default argument values
-    shell = False
-    atomic = False
-    cleanup = False
-    chef_repo = "git://github.com/maoy/inception-chef-repo.git"
-    chef_repo_branch = "master"
-    parallel = False
-    ssh_keyfile = None
-    pool = 'research'
+    # Register options
+    CONF.register_opts(cfg_file_opts)
+    CONF.register_cli_opts(cli_opts)
+
+    # Processes both config file and cmd line opts
     try:
-        optlist, _ = getopt.getopt(sys.argv[1:], 'p:n:',
-                                   ["shell", "atomic", "cleanup", "parallel",
-                                    "chef-repo=", "chef-repo-branch=",
-                                    "ssh-keyfile=", 'pool='])
-        optdict = dict(optlist)
-        prefix = optdict['-p']
-        num_workers = int(optdict['-n'])
-        if "--shell" in optdict:
-            shell = True
-        if "--atomic" in optdict:
-            atomic = True
-        if "--cleanup" in optdict:
-            cleanup = True
-        if "--chef-repo" in optdict:
-            chef_repo = optdict["--chef-repo"]
-        if "--chef-repo-branch" in optdict:
-            chef_repo_branch = optdict["--chef-repo-branch"]
-        if "--parallel" in optdict:
-            parallel = True
-        if "--ssh-keyfile" in optdict:
-            ssh_keyfile = optdict["--ssh-keyfile"]
-        if "--pool" in optdict:
-            pool = optdict["--pool"]
-    except Exception:
-        print traceback.format_exc()
-        usage()
-        sys.exit(1)
-    orchestrator = Orchestrator(prefix, num_workers, chef_repo,
-                                chef_repo_branch, parallel, ssh_keyfile, pool)
-    if shell:
+        CONF(args=sys.argv[1:],
+             default_config_files=[os.path.abspath(os.path.dirname(__file__) +
+                                                   '/../inception.conf')],
+             version='Inception: Version 0.0.1')
+    except Exception as e:
+        print e
+        sys.exit(-2)
+
+    orchestrator = Orchestrator(CONF)
+
+    if CONF.shell:
         # give me a ipython shell
         IPython.embed()
         return
-    if cleanup:
+    if CONF.cleanup:
         orchestrator.cleanup()
     else:
-        orchestrator.start(atomic)
-
-
-def usage():
-    print """
-python %s -p <prefix> -n <num_workers> [--shell] [--atomic] [--cleanup]
-  [--parallel] [--chef-repo=git://github.com/maoy/inception-chef-repo.git]
-  [--chef-repo-branch=master] [--ssh-keyfile=/path/to/key] [--pool=nova]
-
-Note: make sure OpenStack-related environment variables are defined.
-""" % (__file__,)
+        orchestrator.start()
 
 ##############################################
 if __name__ == "__main__":

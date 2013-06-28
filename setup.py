@@ -17,4 +17,5 @@ setup(
     classifiers=["Programming Language :: Python"],
     url='https://github.com/maoy/inception',
     packages=["inception"],
-    )
+    requires=["oslo.config"],
+)
