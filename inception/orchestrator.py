@@ -38,8 +38,90 @@ import traceback
 
 import IPython
 from novaclient.v1_1.client import Client
+from oslo.config import cfg
 
+from inception import __version__
 from inception.utils import cmd
+
+CONF = cfg.CONF
+
+inception_opts = [
+    cfg.StrOpt('prefix',
+               default=None,
+               metavar='PREFIX',
+               required=True,
+               short='p',
+               help='(unique) prefix for node names (no hyphens allowed)'),
+    cfg.IntOpt('num_workers',
+               default=2,
+               metavar='NUM',
+               short='n',
+               help='number of worker nodes to create'),
+    cfg.BoolOpt('shell',
+                default=False,
+                help='initialize, then drop to embedded IPython shell'),
+    cfg.BoolOpt('atomic',
+                default=False,
+                help='on error, run as if --cleanup was specified'),
+    cfg.BoolOpt('cleanup',
+                default=False,
+                help='take down the inception cloud'),
+    cfg.BoolOpt('parallel',
+                default=False,
+                help='execute chef-related setup tasks in parallel'),
+    cfg.StrOpt('chef_repo',
+               default='git://github.com/maoy/inception-chef-repo.git',
+               metavar='URL',
+               help='URL of Chef repo'),
+    cfg.StrOpt('chef_repo_branch',
+               default='master',
+               metavar='BRANCH',
+               help='name of branch of Chef repo to use'),
+    cfg.StrOpt('ssh_keyfile',
+               default=None,
+               metavar='PATH',
+               help='path of additional keyfile for node access via ssh'),
+    cfg.StrOpt('pool',
+               default='research',
+               help='name of pool for floating IP addresses'),
+    cfg.StrOpt('user',
+               default='ubuntu',
+               help=''),
+    cfg.StrOpt('image',
+               default='f3d62d5b-a76b-4997-a579-ff946a606132',
+               help=''),
+    cfg.IntOpt('flavor',
+               default=3,
+               help='id of machine flavor used for nodes'),
+    cfg.IntOpt('gateway_flavor',
+               default=1,
+               help='id of machine flavor used for gateway'),
+    cfg.StrOpt('key_name',
+               default='<your_key_name_here>',
+               help='name of key for node access via ssh'),
+    cfg.ListOpt('security_groups',
+                default=['default', 'ssh'],
+                help='list of security groups for nodes'),
+    cfg.StrOpt('src_dir',
+               default='../bin/',
+               help='path of setup script source dir on client'),
+    cfg.StrOpt('dst_dir',
+               default='/home/ubuntu/',
+               help='path of setup script destination dir on nodes'),
+    cfg.StrOpt('userdata',
+               default='userdata.sh.template',
+               help='template for user data script'),
+    cfg.IntOpt('timeout',
+               default=999999,
+               help='number of seconds for creation timeout'),
+    cfg.IntOpt('poll_interval',
+               default=5,
+               help='interval (in seconds) between readiness polls'),
+]
+
+# Register options
+CONF.reset()
+CONF.register_cli_opts(inception_opts)
 
 
 class Orchestrator(object):
@@ -59,7 +141,7 @@ class Orchestrator(object):
                  image='f3d62d5b-a76b-4997-a579-ff946a606132',
                  flavor=3,
                  gateway_flavor=1,
-                 key_name='shared',
+                 key_name='<your_key_name_here>',
                  security_groups=('default', 'ssh'),
                  src_dir='../bin/',
                  dst_dir='/home/ubuntu/',
@@ -508,63 +590,41 @@ def main():
     """
     program starting point
     """
-    # default argument values
-    shell = False
-    atomic = False
-    cleanup = False
-    chef_repo = "git://github.com/maoy/inception-chef-repo.git"
-    chef_repo_branch = "master"
-    parallel = False
-    ssh_keyfile = None
-    pool = 'research'
+
+    # Processes both config file and cmd line opts
     try:
-        optlist, _ = getopt.getopt(sys.argv[1:], 'p:n:',
-                                   ["shell", "atomic", "cleanup", "parallel",
-                                    "chef-repo=", "chef-repo-branch=",
-                                    "ssh-keyfile=", 'pool='])
-        optdict = dict(optlist)
-        prefix = optdict['-p']
-        num_workers = int(optdict['-n'])
-        if "--shell" in optdict:
-            shell = True
-        if "--atomic" in optdict:
-            atomic = True
-        if "--cleanup" in optdict:
-            cleanup = True
-        if "--chef-repo" in optdict:
-            chef_repo = optdict["--chef-repo"]
-        if "--chef-repo-branch" in optdict:
-            chef_repo_branch = optdict["--chef-repo-branch"]
-        if "--parallel" in optdict:
-            parallel = True
-        if "--ssh-keyfile" in optdict:
-            ssh_keyfile = optdict["--ssh-keyfile"]
-        if "--pool" in optdict:
-            pool = optdict["--pool"]
-    except Exception:
-        print traceback.format_exc()
-        usage()
-        sys.exit(1)
-    orchestrator = Orchestrator(prefix, num_workers, chef_repo,
-                                chef_repo_branch, parallel, ssh_keyfile, pool)
-    if shell:
+        CONF(args=sys.argv[1:], version="Inception: version %s" % __version__)
+    except Exception, e:
+        print e
+        sys.exit(-2)
+
+    orchestrator = Orchestrator(CONF.prefix,
+                                CONF.num_workers,
+                                CONF.chef_repo,
+                                CONF.chef_repo_branch,
+                                CONF.parallel,
+                                CONF.ssh_keyfile,
+                                CONF.pool,
+                                CONF.user,
+                                CONF.image,
+                                CONF.flavor,
+                                CONF.gateway_flavor,
+                                CONF.key_name,
+                                CONF.security_groups,
+                                CONF.src_dir,
+                                CONF.dst_dir,
+                                CONF.userdata,
+                                CONF.timeout,
+                                CONF.poll_interval)
+
+    if CONF.shell:
         # give me a ipython shell
         IPython.embed()
         return
-    if cleanup:
+    if CONF.cleanup:
         orchestrator.cleanup()
     else:
-        orchestrator.start(atomic)
-
-
-def usage():
-    print """
-python %s -p <prefix> -n <num_workers> [--shell] [--atomic] [--cleanup]
-  [--parallel] [--chef-repo=git://github.com/maoy/inception-chef-repo.git]
-  [--chef-repo-branch=master] [--ssh-keyfile=/path/to/key] [--pool=nova]
-
-Note: make sure OpenStack-related environment variables are defined.
-""" % (__file__,)
+        orchestrator.start(CONF.atomic)
 
 ##############################################
 if __name__ == "__main__":
