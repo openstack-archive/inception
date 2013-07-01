@@ -17,4 +17,8 @@ setup(
     classifiers=["Programming Language :: Python"],
     url='https://github.com/maoy/inception',
     packages=["inception"],
-    )
+    install_requires=[
+        "python-novaclient>=2.13.0",
+        "IPython>=0.13.2",
+    ],
+)
