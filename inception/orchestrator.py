@@ -27,7 +27,6 @@ developer/user
 
 from collections import OrderedDict
 import functools
-import getopt
 import os
 import Queue
 import subprocess
@@ -43,84 +42,86 @@ from oslo.config import cfg
 from inception import __version__
 from inception.utils import cmd
 
-CONF = cfg.CONF
-
-inception_opts = [
+orchestrator_opts = [
     cfg.StrOpt('prefix',
                default=None,
-               metavar='PREFIX',
                required=True,
                short='p',
-               help='(unique) prefix for node names (no hyphens allowed)'),
+               help='unique prefix for node names (no hyphens allowed)'),
     cfg.IntOpt('num_workers',
                default=2,
-               metavar='NUM',
                short='n',
                help='number of worker nodes to create'),
-    cfg.BoolOpt('shell',
-                default=False,
-                help='initialize, then drop to embedded IPython shell'),
     cfg.BoolOpt('atomic',
                 default=False,
-                help='on error, run as if --cleanup was specified'),
-    cfg.BoolOpt('cleanup',
-                default=False,
-                help='take down the inception cloud'),
+                help='on error, whether rollback, i.e., auto delete all'
+                     ' created virtual resources'),
     cfg.BoolOpt('parallel',
                 default=False,
-                help='execute chef-related setup tasks in parallel'),
+                help='execute Chef-related setup tasks in parallel'),
     cfg.StrOpt('chef_repo',
                default='git://github.com/maoy/inception-chef-repo.git',
-               metavar='URL',
-               help='URL of Chef repo'),
+               help='URL of Chef repository'),
     cfg.StrOpt('chef_repo_branch',
                default='master',
-               metavar='BRANCH',
                help='name of branch of Chef repo to use'),
     cfg.StrOpt('ssh_keyfile',
                default=None,
-               metavar='PATH',
-               help='path of additional keyfile for node access via ssh'),
+               help='path of extra public key(s) for node access via ssh'),
     cfg.StrOpt('pool',
                default='research',
                help='name of pool for floating IP addresses'),
     cfg.StrOpt('user',
                default='ubuntu',
-               help=''),
+               help='login id with sudo for all nodes'),
     cfg.StrOpt('image',
                default='f3d62d5b-a76b-4997-a579-ff946a606132',
-               help=''),
+               help='id of image used to construct nodes (=u1204-130531-gv)'),
     cfg.IntOpt('flavor',
                default=3,
-               help='id of machine flavor used for nodes'),
+               help='id of machine flavor used for nodes (3=medium)'),
     cfg.IntOpt('gateway_flavor',
                default=1,
-               help='id of machine flavor used for gateway'),
+               help='id of machine flavor used to construct GW (1=tiny)'),
     cfg.StrOpt('key_name',
-               default='<your_key_name_here>',
-               help='name of key for node access via ssh'),
+               default='shared',
+               help='name of public key for node access via ssh'),
     cfg.ListOpt('security_groups',
                 default=['default', 'ssh'],
-                help='list of security groups for nodes'),
+                help='list of security groups (firewall rules) for nodes'),
     cfg.StrOpt('src_dir',
                default='../bin/',
-               help='path of setup script source dir on client'),
+               help='relative source location (to __file__) of various'
+                    ' chef-related setup scripts on client'),
     cfg.StrOpt('dst_dir',
                default='/home/ubuntu/',
-               help='path of setup script destination dir on nodes'),
+               help='absolute destination path for chef-related setup scripts'
+                    ' on nodes'),
     cfg.StrOpt('userdata',
                default='userdata.sh.template',
-               help='template for user data script'),
+               help='bash script run by cloud-init in late boot stage'
+                    ' (rc.local-like)'),
     cfg.IntOpt('timeout',
                default=999999,
-               help='number of seconds for creation timeout'),
+               help='maximum time (in seconds) to wait for all nodes to be'
+                    ' ready [ssh-able + userdata]'),
     cfg.IntOpt('poll_interval',
                default=5,
                help='interval (in seconds) between readiness polls'),
 ]
 
-# Register options
-CONF.register_cli_opts(inception_opts)
+cmd_opts = [
+    cfg.BoolOpt('shell',
+                default=False,
+                help='initialize, then drop to embedded IPython shell'),
+    cfg.BoolOpt('cleanup',
+                default=False,
+                help='take down the inception cloud'),
+]
+
+CONF = cfg.CONF
+CONF.register_cli_opts(orchestrator_opts)
+CONF.register_cli_opts(cmd_opts)
 
 
 class Orchestrator(object):
@@ -131,46 +132,25 @@ class Orchestrator(object):
     def __init__(self,
                  prefix,
                  num_workers,
+                 atomic,
+                 parallel,
                  chef_repo,
                  chef_repo_branch,
-                 parallel,
-                 ssh_keyfile=None,
-                 pool='research',
-                 user='ubuntu',
-                 image='f3d62d5b-a76b-4997-a579-ff946a606132',
-                 flavor=3,
-                 gateway_flavor=1,
-                 key_name='<your_key_name_here>',
-                 security_groups=('default', 'ssh'),
-                 src_dir='../bin/',
-                 dst_dir='/home/ubuntu/',
-                 userdata='userdata.sh.template',
-                 timeout=999999,
-                 poll_interval=5):
+                 ssh_keyfile,
+                 pool,
+                 user,
+                 image,
+                 flavor,
+                 gateway_flavor,
+                 key_name,
+                 security_groups,
+                 src_dir,
+                 dst_dir,
+                 userdata,
+                 timeout,
+                 poll_interval):
         """
-        @param prefix: unique name as prefix
-        @param num_workers: how many worker nodes you'd like
-        @param chef_repo: chef repository location
-        @param chef_repo_branch: which branch to use in repo
-        @param parallel: whether run functions in parallel (via threads, for
-            accelerating) or sequential
-        @param ssh_keyfile: extra ssh public key to login user account
-        @param pool: floating ip pool
-        @param user: username (with root permission) for all servers
-        @param image: default u1204-130531-gv
-        @param flavor: default medium
-        @param gateway_flavor: default tiny
-        @param key_name: ssh public key to be injected
-        @param security_groups: firewall rules
-        @param src_dir: location from where scripts are uploaded to servers.
-            Relative path to __file__
-        @param dst_dir: target location of scripts on servers. Must be absolte
-            path
-        @param userdata: a bash script to be executed by cloud-init (in late
-            booting stage, rc.local-like)
-        @param timeout: sleep time (s) for servers to be launched
-        @param poll_interval: every this time poll to check whether a server
-            has finished launching, i.e., ssh-able + userdata done
+        For doc on each param refer to orchestrator_opts
         """
         ## check args
         #TODO(changbl): remove the restriction of "num_workers <= 5"
@@ -183,9 +163,11 @@ class Orchestrator(object):
         ## args
         self.prefix = prefix
         self.num_workers = num_workers
+        self.atomic = atomic
+        self.parallel = parallel
         self.chef_repo = chef_repo
         self.chef_repo_branch = chef_repo_branch
-        self.parallel = parallel
+        self.ssh_keyfile = ssh_keyfile
         self.pool = pool
         self.user = user
         self.image = image
@@ -198,14 +180,14 @@ class Orchestrator(object):
         self.dst_dir = os.path.abspath(dst_dir)
         with open(os.path.join(self.src_dir, userdata), 'r') as fin:
             self.userdata = fin.read()
-        # Inject the extra ssh public key if any
-        ssh_keycontent = ''
-        if ssh_keyfile:
-            with open(ssh_keyfile, 'r') as fin:
-                ssh_keycontent = fin.read()
-        self.userdata = self.userdata % (user, ssh_keycontent)
         self.timeout = timeout
         self.poll_interval = poll_interval
+        # Inject the extra ssh public key if any
+        ssh_keycontent = ''
+        if self.ssh_keyfile:
+            with open(self.ssh_keyfile, 'r') as fin:
+                ssh_keycontent = fin.read()
+        self.userdata = self.userdata % (user, ssh_keycontent)
         # scripts to run on chefserver, execute one by one (sequence matters)
         self.chefserver_commands = []
         self.chefserver_files = OrderedDict()
@@ -243,12 +225,9 @@ class Orchestrator(object):
         self._worker_names = []
         self._gateway_floating_ip = None
 
-    def start(self, atomic):
+    def start(self):
         """
         run the whole process
-
-        @param atomic: upon exception, whether rollback, i.e., auto delete all
-            created servers
         """
         try:
             self._check_existence()
@@ -265,15 +244,16 @@ class Orchestrator(object):
             print "OpenStack dashboard is https://%s" % self._controller_ip
         except Exception:
             print traceback.format_exc()
-            if atomic:
+            if self.atomic:
                 self.cleanup()
 
     def _check_existence(self):
         """
         Check whether inception cloud existence based on given self.prefix
         """
+        full_prefix = self.prefix + '-'
         for server in self.client.servers.list():
-            if '-' in server.name and server.name.split('-')[0] == self.prefix:
+            if server.name.startswith(full_prefix):
                 raise ValueError('prefix=%s is already used' % self.prefix)
 
     def _create_servers(self):
@@ -589,19 +569,19 @@ def main():
     """
     program starting point
     """
-
-    # Processes both config file and cmd line opts
+    # processes args
     try:
         CONF(args=sys.argv[1:], version="Inception: version %s" % __version__)
-    except Exception, e:
+    except Exception as e:
         print e
-        sys.exit(-2)
-
+        sys.exit(1)
+    # start orchestator
     orchestrator = Orchestrator(CONF.prefix,
                                 CONF.num_workers,
+                                CONF.atomic,
+                                CONF.parallel,
                                 CONF.chef_repo,
                                 CONF.chef_repo_branch,
-                                CONF.parallel,
                                 CONF.ssh_keyfile,
                                 CONF.pool,
                                 CONF.user,
@@ -615,7 +595,6 @@ def main():
                                 CONF.userdata,
                                 CONF.timeout,
                                 CONF.poll_interval)
-
     if CONF.shell:
         # give me a ipython shell
         IPython.embed()
@@ -623,7 +602,7 @@ def main():
     if CONF.cleanup:
         orchestrator.cleanup()
     else:
-        orchestrator.start(CONF.atomic)
+        orchestrator.start()
 
 ##############################################
 if __name__ == "__main__":
