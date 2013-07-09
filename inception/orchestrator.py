@@ -31,7 +31,6 @@ import os
 import Queue
 import subprocess
 import sys
-import threading
 import time
 import traceback
 
@@ -41,6 +40,7 @@ from oslo.config import cfg
 
 from inception import __version__
 from inception.utils import cmd
+from inception.utils import wrapper
 
 orchestrator_opts = [
     cfg.StrOpt('prefix',
@@ -471,7 +471,7 @@ class Orchestrator(object):
             threads = []
             # create and start all threads
             for func in funcs:
-                thread = FuncThread(func, exception_queue)
+                thread = wrapper.FuncThread(func, exception_queue)
                 threads.append(thread)
                 thread.start()
             # wait for all threads to finish
@@ -539,30 +539,6 @@ class Orchestrator(object):
                 print traceback.format_exc()
                 continue
         print "Inception cloud '%s' has been cleaned up." % self.prefix
-
-
-class FuncThread(threading.Thread):
-    """
-    thread of calling a partial function, based on the regular thread
-    by adding a shared-with-others exception queue
-    """
-    def __init__(self, func, exception_queue):
-        threading.Thread.__init__(self)
-        self._func = func
-        self._exception_queue = exception_queue
-
-    def run(self):
-        """
-        Call the function, and put exception in queue if any
-        """
-        try:
-            self._func()
-        except Exception:
-            func_info = (str(self._func.func) + " " + str(self._func.args) +
-                         " " + str(self._func.keywords))
-            info = (self.name, func_info, traceback.format_exc())
-            print info
-            self._exception_queue.put(info)
 
 
 def main():
