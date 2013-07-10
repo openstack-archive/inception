@@ -60,7 +60,7 @@ orchestrator_opts = [
                 default=False,
                 help='execute Chef-related setup tasks in parallel'),
     cfg.StrOpt('chef_repo',
-               default='git://github.com/maoy/inception-chef-repo.git',
+               default='git://github.com/att/inception-chef-repo.git',
                help='URL of Chef repository'),
     cfg.StrOpt('chef_repo_branch',
                default='master',
