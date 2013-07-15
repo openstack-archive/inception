@@ -18,11 +18,6 @@ rVMs eth1 IPs
 
 #TODO(to-be-assigned)
 WebUI: Horizon-based
-
-#TODO(to-be-assigned)
-templatize all templatable configurations (environments, roles, etc), put the
-rest (sensitive data) in a private configuration file specific to each
-developer/user
 """
 
 from collections import OrderedDict
@@ -123,6 +118,9 @@ CONF = cfg.CONF
 CONF.register_cli_opts(orchestrator_opts)
 CONF.register_cli_opts(cmd_opts)
 
+# concatenation character between prefix and name
+CONCAT_CHAR = '-'
+
 
 class Orchestrator(object):
     """
@@ -156,10 +154,9 @@ class Orchestrator(object):
         #TODO(changbl): remove the restriction of "num_workers <= 5"
         if num_workers > 5:
             raise ValueError("currently only supports num_workers <= 5")
-        #TODO(changbl): make separator '-' a constant and accessible
-        #everywhere
-        if '-' in prefix:
-            raise ValueError('"-" cannot exist in prefix=%r' % prefix)
+        if CONCAT_CHAR in prefix:
+            raise ValueError('"%s" cannot exist in prefix=%r' % (CONCAT_CHAR,
+                                                                 prefix))
         ## args
         self.prefix = prefix
         self.num_workers = num_workers
@@ -251,7 +248,7 @@ class Orchestrator(object):
         """
         Check whether inception cloud existence based on given self.prefix
         """
-        full_prefix = self.prefix + '-'
+        full_prefix = self.prefix + CONCAT_CHAR
         for server in self.client.servers.list():
             if server.name.startswith(full_prefix):
                 raise ValueError('prefix=%s is already used' % self.prefix)
@@ -263,7 +260,7 @@ class Orchestrator(object):
         """
         # launch gateway
         gateway = self.client.servers.create(
-            name=self.prefix + '-gateway',
+            name=self.prefix + CONCAT_CHAR + 'gateway',
             image=self.image,
             flavor=self.gateway_flavor,
             key_name=self.key_name,
@@ -274,7 +271,7 @@ class Orchestrator(object):
 
         # launch chefserver
         chefserver = self.client.servers.create(
-            name=self.prefix + '-chefserver',
+            name=self.prefix + CONCAT_CHAR + 'chefserver',
             image=self.image,
             flavor=self.flavor,
             key_name=self.key_name,
@@ -286,7 +283,7 @@ class Orchestrator(object):
 
         # launch controller
         controller = self.client.servers.create(
-            name=self.prefix + '-controller',
+            name=self.prefix + CONCAT_CHAR + 'controller',
             image=self.image,
             flavor=self.flavor,
             key_name=self.key_name,
@@ -298,7 +295,7 @@ class Orchestrator(object):
         # launch workers
         for i in xrange(self.num_workers):
             worker = self.client.servers.create(
-                name=self.prefix + '-worker%s' % (i + 1),
+                name=self.prefix + CONCAT_CHAR + 'worker%s' % (i + 1),
                 image=self.image,
                 flavor=self.flavor,
                 key_name=self.key_name,
@@ -511,10 +508,11 @@ class Orchestrator(object):
         servers = []
         gateway = None
         gateway_ip = None
+        full_prefix = self.prefix + CONCAT_CHAR
         for server in self.client.servers.list():
-            if '-' in server.name and server.name.split('-')[0] == self.prefix:
+            if server.name.startswith(full_prefix):
                 servers.append(server)
-            if server.name == self.prefix + '-gateway':
+            if server.name == self.prefix + CONCAT_CHAR + 'gateway':
                 gateway = server
                 # get ipaddress (there is only 1 item in the dict)
                 for key in gateway.networks:
