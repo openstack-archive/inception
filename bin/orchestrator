@@ -1,0 +1,57 @@
+#!/usr/bin/env python
+
+import logging
+import sys
+
+import IPython
+from oslo.config import cfg
+
+from inception import __version__
+from inception.orchestrator import Orchestrator
+from inception.utils import log
+
+LOGGER = logging.getLogger(__name__)
+
+CONF = cfg.CONF
+
+
+def main():
+    # processes args
+    try:
+        CONF(args=sys.argv[1:], version="Inception: version %s" % __version__)
+    except Exception as e:
+        LOGGER.error(e)
+        sys.exit(1)
+    # start orchestator
+    log.setup('inception')
+    orchestrator = Orchestrator(CONF.prefix,
+                                CONF.num_workers,
+                                CONF.atomic,
+                                CONF.parallel,
+                                CONF.chef_repo,
+                                CONF.chef_repo_branch,
+                                CONF.ssh_keyfile,
+                                CONF.pool,
+                                CONF.user,
+                                CONF.image,
+                                CONF.flavor,
+                                CONF.gateway_flavor,
+                                CONF.key_name,
+                                CONF.security_groups,
+                                CONF.src_dir,
+                                CONF.dst_dir,
+                                CONF.userdata,
+                                CONF.timeout,
+                                CONF.poll_interval)
+    if CONF.shell:
+        # give me a ipython shell
+        IPython.embed()
+        return
+    if CONF.cleanup:
+        orchestrator.cleanup()
+    else:
+        orchestrator.start()
+
+##############################################
+if __name__ == "__main__":
+    main()

@@ -23,3 +23,7 @@ timeout = 999999
 poll_interval = 5
 
 pool = research
+
+log_dir=/etc/inception/
+
+log_file=inception.log
