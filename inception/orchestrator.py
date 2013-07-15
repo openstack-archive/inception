@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """
 #TODO(changbl)
 Networks:
@@ -22,20 +21,19 @@ WebUI: Horizon-based
 
 from collections import OrderedDict
 import functools
+import logging
 import os
 import Queue
 import subprocess
-import sys
 import time
-import traceback
 
-import IPython
 from novaclient.v1_1.client import Client
 from oslo.config import cfg
 
-from inception import __version__
 from inception.utils import cmd
 from inception.utils import wrapper
+
+LOGGER = logging.getLogger(__name__)
 
 orchestrator_opts = [
     cfg.StrOpt('prefix',
@@ -235,14 +233,19 @@ class Orchestrator(object):
             self._deploy_dnsmasq()
             self._setup_controller()
             self._setup_workers()
-            print "Your inception cloud '%s' is ready!!!" % self.prefix
-            print "Gateway IP is %s" % self._gateway_floating_ip.ip
-            print "Chef server WebUI is http://%s:4040" % self._chefserver_ip
-            print "OpenStack dashboard is https://%s" % self._controller_ip
+            LOGGER.info("Your inception cloud '%s' is ready!!!", self.prefix)
+            LOGGER.info("Gateway IP is %s", self._gateway_floating_ip.ip)
+            LOGGER.info("Chef server WebUI is http://%s:4040",
+                        self._chefserver_ip)
+            LOGGER.info("OpenStack dashboard is https://%s",
+                        self._controller_ip)
         except Exception:
-            print traceback.format_exc()
+            LOGGER.exception("Error in launching inception cloud")
             if self.atomic:
                 self.cleanup()
+                LOGGER.info("Although there was error in creating your "
+                            "inception cloud '%s', resources have been "
+                            "successfully cleaned up", self.prefix)
 
     def _check_existence(self):
         """
@@ -267,7 +270,7 @@ class Orchestrator(object):
             security_groups=self.security_groups,
             userdata=self.userdata)
         self._gateway_id = gateway.id
-        print "Creating %s" % gateway
+        LOGGER.info("Creating %s", gateway)
 
         # launch chefserver
         chefserver = self.client.servers.create(
@@ -279,7 +282,7 @@ class Orchestrator(object):
             userdata=self.userdata,
             files=self.chefserver_files)
         self._chefserver_id = chefserver.id
-        print "Creating %s" % chefserver
+        LOGGER.info("Creating %s", chefserver)
 
         # launch controller
         controller = self.client.servers.create(
@@ -290,7 +293,7 @@ class Orchestrator(object):
             security_groups=self.security_groups,
             userdata=self.userdata)
         self._controller_id = controller.id
-        print "Creating %s" % controller
+        LOGGER.info("Creating %s", controller)
 
         # launch workers
         for i in xrange(self.num_workers):
@@ -302,10 +305,10 @@ class Orchestrator(object):
                 security_groups=self.security_groups,
                 userdata=self.userdata)
             self._worker_ids.append(worker.id)
-            print "Creating %s" % worker
+            LOGGER.info("Creating %s", worker)
 
-        print ('wait at most %s seconds for servers to be ready (ssh-able + '
-               'userdata done)' % self.timeout)
+        LOGGER.info('wait at most %s seconds for servers to be ready'
+                    ' (ssh-able + userdata done)', self.timeout)
         servers_ready = False
         begin_time = time.time()
         while time.time() - begin_time <= self.timeout:
@@ -335,8 +338,8 @@ class Orchestrator(object):
                 servers_ready = True
                 break
             except (UnboundLocalError, subprocess.CalledProcessError) as error:
-                print ('servers are not all ready, error=%s, sleep %s seconds'
-                       % (error, self.poll_interval))
+                LOGGER.info('servers are not all ready, error=%s,'
+                            ' sleep %s seconds', error, self.poll_interval)
                 time.sleep(self.poll_interval)
                 continue
         if not servers_ready:
@@ -346,7 +349,7 @@ class Orchestrator(object):
         floating_ip = self.client.floating_ips.create(pool=self.pool)
         self.client.servers.add_floating_ip(self._gateway_id, floating_ip)
         self._gateway_floating_ip = floating_ip
-        print "Creating and associating %s" % floating_ip
+        LOGGER.info("Creating and associating %s", floating_ip)
 
     def _get_server_info(self, _id):
         """
@@ -478,7 +481,7 @@ class Orchestrator(object):
             got_exception = not exception_queue.empty()
             while not exception_queue.empty():
                 thread_name, func_info, exc = exception_queue.get()
-                print thread_name, func_info, exc
+                LOGGER.error('%s %s %s', thread_name, func_info, exc)
             if got_exception:
                 raise RuntimeError("One or more subthreads got exception")
 
@@ -503,7 +506,7 @@ class Orchestrator(object):
         """
         Clean up the whole inception cloud, based on self.prefix
         """
-        print "Let's clean up inception cloud '%s'..." % self.prefix
+        LOGGER.info("Let's clean up inception cloud '%s'...", self.prefix)
         ## find out servers info
         servers = []
         gateway = None
@@ -522,62 +525,18 @@ class Orchestrator(object):
         try:
             for floating_ip in self.client.floating_ips.list():
                 if floating_ip.ip == gateway_ip:
-                    print ("Disassociating and releasing %s" % floating_ip)
+                    LOGGER.info("Disassociating and releasing %s", floating_ip)
                     self.client.servers.remove_floating_ip(gateway,
                                                            floating_ip)
                     self.client.floating_ips.delete(floating_ip)
         except Exception:
-            print traceback.format_exc()
+            LOGGER.exception("Error in disassociating/releasing floating IP")
         ## try deleting each server
         for server in servers:
             try:
-                print 'Deleting %s' % server
+                LOGGER.info('Deleting %s', server)
                 server.delete()
             except Exception:
-                print traceback.format_exc()
+                LOGGER.exception("Error in deleting server %s", server)
                 continue
-        print "Inception cloud '%s' has been cleaned up." % self.prefix
-
-
-def main():
-    """
-    program starting point
-    """
-    # processes args
-    try:
-        CONF(args=sys.argv[1:], version="Inception: version %s" % __version__)
-    except Exception as e:
-        print e
-        sys.exit(1)
-    # start orchestator
-    orchestrator = Orchestrator(CONF.prefix,
-                                CONF.num_workers,
-                                CONF.atomic,
-                                CONF.parallel,
-                                CONF.chef_repo,
-                                CONF.chef_repo_branch,
-                                CONF.ssh_keyfile,
-                                CONF.pool,
-                                CONF.user,
-                                CONF.image,
-                                CONF.flavor,
-                                CONF.gateway_flavor,
-                                CONF.key_name,
-                                CONF.security_groups,
-                                CONF.src_dir,
-                                CONF.dst_dir,
-                                CONF.userdata,
-                                CONF.timeout,
-                                CONF.poll_interval)
-    if CONF.shell:
-        # give me a ipython shell
-        IPython.embed()
-        return
-    if CONF.cleanup:
-        orchestrator.cleanup()
-    else:
-        orchestrator.start()
-
-##############################################
-if __name__ == "__main__":
-    main()
+        LOGGER.info("Inception cloud '%s' has been cleaned up.", self.prefix)

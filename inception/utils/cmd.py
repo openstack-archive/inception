@@ -1,7 +1,10 @@
 """Command execution utils
 """
 
+import logging
 import subprocess
+
+LOGGER = logging.getLogger(__name__)
 
 
 def local(cmd, screen_output=False):
@@ -14,7 +17,7 @@ def local(cmd, screen_output=False):
     @return: (output, error)
       if screen_output is True, return ("", "")
     """
-    print 'executing command=', cmd
+    LOGGER.info('executing command=%s', cmd)
     stdout, stderr = ((None, None) if screen_output
                       else (subprocess.PIPE, subprocess.PIPE))
     proc = subprocess.Popen(cmd,
@@ -62,7 +65,7 @@ def ssh(uri, cmd, screen_output=False, silent=True, agent_forwarding=False):
     if agent_forwarding:
         flags.append('-A')
     cmd = 'ssh -p %s %s %s %s' % (port, ' '.join(flags), uri, cmd)
-    print 'executing command=', cmd
+    LOGGER.info('executing command=%s', cmd)
     stdout, stderr = ((None, None) if screen_output
                       else (subprocess.PIPE, subprocess.PIPE))
     proc = subprocess.Popen(cmd,
