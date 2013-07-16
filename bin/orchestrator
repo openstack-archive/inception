@@ -34,6 +34,7 @@ def main():
                                 CONF.pool,
                                 CONF.user,
                                 CONF.image,
+                                CONF.chefserver_image,
                                 CONF.flavor,
                                 CONF.gateway_flavor,
                                 CONF.key_name,

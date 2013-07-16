@@ -69,7 +69,10 @@ orchestrator_opts = [
                help='login id with sudo for all nodes'),
     cfg.StrOpt('image',
                default='f3d62d5b-a76b-4997-a579-ff946a606132',
-               help='id of image used to construct nodes (=u1204-130531-gv)'),
+               help='id of image used to construct nodes (=u1204-130621-gv)'),
+    cfg.StrOpt('chefserver_image',
+               default='8848d4cd-1bdf-4627-ae31-ce9bf61440a4',
+               help='id of image to construct chefserver (=u1204-130716-gvc)'),
     cfg.IntOpt('flavor',
                default=3,
                help='id of machine flavor used for nodes (3=medium)'),
@@ -136,6 +139,7 @@ class Orchestrator(object):
                  pool,
                  user,
                  image,
+                 chefserver_image,
                  flavor,
                  gateway_flavor,
                  key_name,
@@ -166,6 +170,7 @@ class Orchestrator(object):
         self.pool = pool
         self.user = user
         self.image = image
+        self.chefserver_image = chefserver_image
         self.flavor = flavor
         self.gateway_flavor = gateway_flavor
         self.key_name = key_name
@@ -275,7 +280,7 @@ class Orchestrator(object):
         # launch chefserver
         chefserver = self.client.servers.create(
             name=self.prefix + CONCAT_CHAR + 'chefserver',
-            image=self.image,
+            image=self.chefserver_image,
             flavor=self.flavor,
             key_name=self.key_name,
             security_groups=self.security_groups,
