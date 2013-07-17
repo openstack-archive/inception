@@ -14,9 +14,6 @@ rVMs eth1 IPs
 [prefix]-controller(s), 10.251.0.3 [ - 10.251.0.255] # maximum 253
 [prefix]-worker-1, 10.251.1.1
 [prefix]-worker-2(s), 10.251.1.2 [ - 10.251.255.254] # maximum ~65000
-
-#TODO(to-be-assigned)
-WebUI: Horizon-based
 """
 
 from collections import OrderedDict
