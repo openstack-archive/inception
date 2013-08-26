@@ -1,0 +1,8 @@
+Verified+2: Jenkins
+Approved+1: Pingkai Liu <pingkai@gmail.com>
+Code-Review+2: Pingkai Liu <pingkai@gmail.com>
+Submitted-by: Jenkins
+Submitted-at: Mon, 26 Aug 2013 17:02:17 +0000
+Reviewed-on: https://review.openstack.org/43737
+Project: stackforge/inception
+Branch: refs/heads/master
