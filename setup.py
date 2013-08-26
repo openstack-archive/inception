@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# Copyright (c) 2012 AT&T. All right reserved.
+# Copyright (c) 2013 AT&T. All right reserved.
 
 try:
     from setuptools import setup
