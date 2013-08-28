@@ -2,7 +2,7 @@
 # Copyright (c) 2013 AT&T. All right reserved.
 
 try:
-    from setuptools import setup
+    from setuptools import setup, find_packages
 except ImportError:
     from distutils.core import setup
 
@@ -16,7 +16,7 @@ setup(
     license="Apache 2.0",
     classifiers=["Programming Language :: Python"],
     url='https://github.com/stackforge/inception',
-    packages=["inception"],
+    packages=find_packages(),
     install_requires=[
         "oslo.config>=1.1.1",
         "python-novaclient>=2.13.0",
