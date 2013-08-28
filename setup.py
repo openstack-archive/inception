@@ -1,10 +1,7 @@
 #!/usr/bin/env python
 # Copyright (c) 2013 AT&T. All right reserved.
 
-try:
-    from setuptools import setup, find_packages
-except ImportError:
-    from distutils.core import setup
+from setuptools import setup, find_packages
 
 # move version string out of setup so it is readily available to others
 from inception import __version__
