@@ -30,6 +30,7 @@ def main():
                                 CONF.parallel,
                                 CONF.chef_repo,
                                 CONF.chef_repo_branch,
+                                CONF.sdn,
                                 CONF.ssh_keyfile,
                                 CONF.pool,
                                 CONF.user,

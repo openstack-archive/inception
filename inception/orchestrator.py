@@ -73,6 +73,10 @@ orchestrator_opts = [
     cfg.StrOpt('chef_repo_branch',
                default='master',
                help='name of branch of Chef repo to use'),
+    cfg.BoolOpt('sdn',
+                default=False,
+                help='whether use SDN/OpenFlow and a full-mesh topology, or a '
+                     'star toplogy with conventioanl L2/L3 network'),
     cfg.StrOpt('ssh_keyfile',
                default=None,
                help='path of extra public key(s) for node access via ssh'),
@@ -150,6 +154,7 @@ class Orchestrator(object):
                  parallel,
                  chef_repo,
                  chef_repo_branch,
+                 sdn,
                  ssh_keyfile,
                  pool,
                  user,
@@ -181,6 +186,7 @@ class Orchestrator(object):
         self.parallel = parallel
         self.chef_repo = chef_repo
         self.chef_repo_branch = chef_repo_branch
+        self.sdn = sdn
         self.ssh_keyfile = ssh_keyfile
         self.pool = pool
         self.user = user
@@ -423,10 +429,24 @@ class Orchestrator(object):
         """
         hostnames = ([self._chefserver_name, self._gateway_name,
                       self._controller_name] + self._worker_names)
-        self._add_run_list(hostnames, 'recipe[openvswitch::network-vxlan]')
         ipaddrs = ([self._chefserver_ip, self._gateway_ip,
                     self._controller_ip] + self._worker_ips)
-        self._run_chef_client(ipaddrs)
+        if self.sdn:
+            self._add_run_list(hostnames,
+                               'recipe[openvswitch::network-vxlan-mesh]')
+            self._run_chef_client(ipaddrs)
+            self._add_run_list(hostnames,
+                               'recipe[openvswitch::openflow-apply]')
+            self._run_chef_client(ipaddrs)
+            self._add_run_list([self._controller_name],
+                               'recipe[openvswitch::sdn-controller]')
+            self._run_chef_client([self._controller_ip])
+            # sleep some time to let nodes connect to SDN controller
+            time.sleep(5)
+        else:
+            self._add_run_list(hostnames,
+                               'recipe[openvswitch::network-vxlan-star]')
+            self._run_chef_client(ipaddrs)
 
     def _deploy_dnsmasq(self):
         """
