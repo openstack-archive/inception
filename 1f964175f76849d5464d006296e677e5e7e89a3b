@@ -1,0 +1,10 @@
+Verified+2: Jenkins
+Approved+1: Changbin Liu <changbin.liu@gmail.com>
+Code-Review+2: Changbin Liu <changbin.liu@gmail.com>
+Approved+1: Scott Daniels <daniels@research.att.com>
+Code-Review+1: Scott Daniels <daniels@research.att.com>
+Submitted-by: Jenkins
+Submitted-at: Fri, 30 Aug 2013 21:04:48 +0000
+Reviewed-on: https://review.openstack.org/44515
+Project: stackforge/inception
+Branch: refs/heads/master
