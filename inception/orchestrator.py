@@ -173,9 +173,6 @@ class Orchestrator(object):
         For doc on each param refer to orchestrator_opts
         """
         ## check args
-        #TODO(changbl): remove the restriction of "num_workers <= 5"
-        if num_workers > 5:
-            raise ValueError("currently only supports num_workers <= 5")
         if CONCAT_CHAR in prefix:
             raise ValueError('"%s" cannot exist in prefix=%r' % (CONCAT_CHAR,
                                                                  prefix))
