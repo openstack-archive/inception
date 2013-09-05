@@ -77,6 +77,7 @@ def ssh(uri, cmd, screen_output=False, silent=True, agent_forwarding=False):
         port = 22
     ## construct flags
     flags = ['-T']
+    flags.append( '-n' )
     if silent:
         flags.append('-o StrictHostKeyChecking=no')
         flags.append('-o UserKnownHostsFile=/dev/null')
