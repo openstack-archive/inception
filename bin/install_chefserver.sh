@@ -30,4 +30,4 @@ EOF
 sudo debconf-set-selections < /tmp/chef_seed
 rm -rf /tmp/chef_seed
 
-sudo apt-get -y install chef chef-server chef-server-api chef-expander
+sudo apt-get -y --force-yes install chef chef-server chef-server-api chef-expander
