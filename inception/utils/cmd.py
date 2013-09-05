@@ -75,8 +75,9 @@ def ssh(uri, cmd, screen_output=False, silent=True, agent_forwarding=False):
     ## default port
     else:
         port = 22
-    ## construct flags
+    ## construct flags 
     flags = ['-T']
+    flags.append('-n')   # prevent read blocking on tty (stdin)
     if silent:
         flags.append('-o StrictHostKeyChecking=no')
         flags.append('-o UserKnownHostsFile=/dev/null')
