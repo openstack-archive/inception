@@ -1,0 +1,153 @@
+\section{Preparation}
+To prepare the workstation and the virtual environment to start an inception cloud, the tasks listed below, and 
+explained in more detail in subsequent sections,  must first be performed. 
+All of these should be done on the workstation or from the workstation browser via the OpenStack dashboard or the 
+Nova client CLI. 
+
+\begin{enumerate}
+\item Install software
+\item Set environment variables
+\item Create keys
+\item Start small boot-up VM
+\item Add floating IP to the VM
+\item Start \verb!sshuttle!
+\end{enumerate}
+
+\subsubsection{Install Software}
+Some or all of the required software might already be installed. 
+Verify that the correct versions of each of the software packages are available on the workstation
+and take steps to upgrade or load the missing packages as is needed.  
+The flavour of Linux installed on your workstation will dictate the exact commands (e.g. apt-get or zypper)
+that are needed to load and\/or upgrade Python, sshuttle, and pip. 
+Pip can then be used to install Nova and Oslo. 
+Examples of each of the commands that might be needed to manage the required software packages are presented 
+in Appendix A. 
+
+\subsubsection{Inception source}
+The source for inception is available from github.
+The command below will fetch the inception source and place it in a directory under the current working directory.
+
+\small\begin{verbatim}
+   git clone https://github.com/stackforge/inception.git
+\end{verbatim}\normalsize
+
+Following the execution of the \verb!git! command, switch to the inception directory and verify that the 
+directory was populated.  
+Inception may be installed, or used from this directory.  
+If the decision is made to install inception, the following command should be used:
+
+\small\begin{verbatim}
+   python setup.py install
+\end{verbatim}\normalsize
+
+\subsubsection{Set Environment Variables}
+Ensure that the environment variables which define the authorisation URL and credentials for OpenStack are set and exported. 
+OpenStack credentials can be obtained using the OpenStack dashboard interface and following these steps:
+\label{set_env_sect} 
+%
+\begin{enumerate}
+\item Log into the dashboard
+\item Click the \verb!Settings! link (top right)
+\item Click the \verb!OpenStack API! link on the left
+\item Click the \verb!Download RC File! button and save the file to disk.
+\end{enumerate}
+%&uindent
+%
+Once the file has been saved to disk you can source the file (the assumption is made that the 
+shell being used is bash compatible).
+Sourcing the file should prompt for a password, and then export the following variables to the environment:
+
+
+\dlbeg{1.2in}
+\dlitem{OS\_AUTH\_URL}{ The reference to a process which provides user authentication.}
+
+\dlitem{OS\_PASSWORD}{ The password for your account (you'll be prompted to enter this when the file is sourced).}
+
+\dlitem{OS\_TENANT\_ID}{ The ID string for the tenant (currently refered to as the project on the dashboard).}
+
+\dlitem{OS\_TENANT\_NAME}{ The human form of the tenant ID.}
+
+\dlitem{OS\_USERNAME}{ Your user name.}
+\dlend
+
+\subsubsection{Create Keys}
+Create (if needed) a public/private key pair and register it with OpenStack.   If you do not have a key pair, generate one using
+nova. (I prefer to name these with the OpenStack cluster/environment name, and then the key name with an extension that 
+indicates private key: agave.scooter.pk.) 
+
+\small\begin{verbatim}
+   touch agave.scooter.pk
+   chmod 600 agave.scooter.pk
+   nova keypair-add scooter >>agave.scooter.pk
+\end{verbatim}\normalsize
+
+The commands above will create the key, write it to disk and register the public key with OpenStack.
+Executing the \verb!touch! and \verb!chmod! commands prior to generating the key adds a bit of security which prevents the exposure of the key 
+which results if the permissions on the key file are changed after it is generated. 
+Regardless of when the permissions are changed, they will need to be changed in order for the file to recognised and used by ssh.
+
+If you already have a private key (one that several users might share) then a public key can be generated from the private key and registered with OpenStack:
+
+\small\begin{verbatim}
+   ssh-keygen -f agave.shared.pk -y >agave.shared.puk
+   nova keypair-add --pub-key agave.shared.puk shared
+
+\end{verbatim}\normalsize
+
+If you have both a public and private key file, then the \verb!ssh-keygen! command can be skipped; it is only necessary to supply the existing public key to 
+OpenStack using the nova command line. 
+
+\subsubsection{Start Tiny Boot-up VM}
+Create and initialise a tiny VM that will act as the initial gateway to the virtual environment for processes running on the workstation.
+For the examples used in the remainder of this document, the boot-up VM is given the name \verb!scooter_bv.! 
+The VM should be started with the key that was registered with OpenStack. 
+
+\small\begin{verbatim}
+   nova boot --image centos --flavor m1.tiny --key_name shared \
+       --security_groups default scooter_bv
+}
+\end{verbatim}\normalsize
+
+\noindent
+The VM should boot quickly and once it is active you may continue.
+
+\subsubsection{Add A Floating IP Address}
+Add a floating (public) IP address to the new VM so that it can be reached from the "real world."
+(xxx.xxx.xxx.xxx is one of the public floating IP addresses that are available; use \verb!nova floating-ip-list! 
+to get a list of available addresses.
+
+\small\begin{verbatim}
+   nova  add-floating-ip scooter_bv xxx.xxx.xxx.xxx
+\end{verbatim}\normalsize
+
+\subsubsection{Start sshuttle}
+The sshuttle programme creates a tunnel through ssh allowing programmes on the workstation to access VMs created on the 
+same internal network as the boot-up VM without having to assign each VM a public address. 
+The sshuttle command is given the private key portion of the key pair that was used to start the boot-up VM; this is 
+necessary to allow sshuttle to start an ssh session through which the tunnel is created.
+The user name (ubuntu in the example below) is any user on the boot-up VM that is available and allows access via
+the key (the assumption is that OpenStack created this user, or it was a part of the saved imagee,  and the public key was 
+inserted into the \verb!authorized_keys! file in the user's \verb!.ssh! directory.)
+
+\small\begin{verbatim}
+   sshuttle -e ssh -A -i ~/.vmkeys/agave.shared.pk -v \
+      -r ubuntu@xxx.xxx.xxx.xxx 192.168.254.0/24 
+\end{verbatim}\normalsize
+
+\noindent
+The \verb!-v! option causes sshuttle to be more verbose with messages to the standard error device.
+Ultimately, redirecting the output of sshuttle to \verb!/dev/null! and running the process asynchronously, is probably 
+wise, but initially seeing the verbose messages scroll by in the window is a nice confirmation that the tunnel is active and data 
+is being transferred. 
+The \verb!xxx! IP address is the public floating IP address assigned earlier.  The second address (192.168.254.0 in the example)
+bb the virtual network that is created by OpenStack.  
+If it is not known, the following command (with suitable path for the public key) might provide the address:
+
+\small\begin{verbatim}
+   ssh -i ~/.vmkeys/agave.shared.pk ubuntu@xxx.xxx.xxx.xxx ifconfig eth0
+\end{verbatim}\normalsize
+
+The netmask can be used to determine the number of bits of the address that are treated as the network ID (probably 24) and thus
+added after the slant on the sshuttle command.
+
+\vspace{20 pt}

@@ -1,0 +1,55 @@
+\section{Starting and Using iVMs}
+The dashboard and\/or nova command line commands can be used to start and manage iVMs within the inception environment.  
+The iVMs are allocated across the worker ICVM(s) that were created by orchestrator.
+The nova command line interface can be used on either the controller ICVM (Ct in the illustration), or directly from 
+the workstation (provided that the proper environment variables have been defined and that sshuttle is tunneling traffic
+to the private control network).  
+Figure \ref{fg_planes} illustrates the logical relationship of the inception \emph{plane} with the hosting 
+OpenStack (virtual plane) environment. 
+
+
+\begin{figure}[!ht]
+  \centering
+  \includegraphics[width=\linewidth]{inception_planes.eps}
+  \tiny
+  \caption{\small The relationship between the inception plane and the virtual plane.
+    \label{fg_planes}\normalsize
+  }
+  \normalsize
+\end{figure}
+
+There are two methods which can be used to ssh into an iVM host. 
+First is to \verb!ssh! into the gateway, then to \verb!ssh! to a worker ICVM, and finally to \verb!ssh! to the desired iVM. 
+The second is to \emph{string} all of the ssh commands together into a single command.  
+Regardless of which method is used, the \verb!-A! and \verb!-i! command line options will need to be given on the initial
+ssh command in order to forward authorisation with each step, and to use the private key that is associated with the ICVMs. 
+While it is necessary to use the \verb!-i! option only on the first command, the \verb!-A! option must be given on all of the
+ssh commands.  
+
+If a single command line is used, it will also be necessary to use the \verb!-t! option to force ssh to treat each \emph{hop} as 
+a terminal session.  
+The next command example illustrates a single ssh command that creates a log-in session on an iVM.
+
+% this is silly -- latex has no conditional 'eject' and so we must wrap in a tabular to ensure it does not split
+% if there isn't room for the whole three lines on the current page/column. 
+\small\begin{tabular}{p{\textwidth}}\begin{verbatim}
+   ssh -t -A -i agave.shared.pk ubuntu@135.207.223.158  \
+       ssh -t -A ubuntu@scooter0-worker1  \
+       ssh -t ubuntu@10.252.0.2
+\end{verbatim}
+\end{tabular}
+\normalsize
+
+
+If this command is going to be executed from a script, or just to make life easier, it  might be good to add the following options
+to each of the ssh commands.
+
+\small\begin{verbatim}
+   -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no 
+\end{verbatim}\normalsize
+
+These prevent information about the hosts being accessed  from being saved in the \verb!known_hosts! file and prevent ssh from 
+complaining if the host information was previously saved and is different from the current information. 
+Be aware that because the host information is being pushed to \verb!/dev/null,! ssh will indicate that it has been added 
+each time the commands are executed (this is less bothersome than having to clean out the known hosts file as the 
+VM host information changes).

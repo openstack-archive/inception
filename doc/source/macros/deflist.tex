@@ -1,0 +1,22 @@
+% -----------------------------------------------------------------------------
+% definition lists:
+% 	better definition list than the tex default, somewhat
+% 	autosized like those in {X}fm, consistently indented text, and it 
+% 	_does_ span pages unlike a single tabular. Leave a blank line
+% 	after a \dlitem{} command for a nice amount of space betwen, 
+% 	or add a space with a following \vpace{len} command to add more. 
+%	\dlitemcw formats the term using a constant width font, othewise it 
+%	is identical to \dlitem.
+% usage:
+%	\dlbeg{term-width}
+%	\dlitem{term}{definition text}
+%	:
+%	:
+%	\dlend
+% -----------------------------------------------------------------------------
+%
+\newlength{\DLdw}
+\newcommand{\dlbeg}[1]{\def\DLtw{#1}\setlength{\DLdw}{\textwidth}\addtolength{\DLdw}{-#1}\addtolength{\DLdw}{-0.4in}\vspace{10pt}}
+\newcommand{\dlitem}[2]{\noindent\begin{tabular}{p{\DLtw} p{\DLdw}}\sf{#1}&#2\end{tabular}\\} 
+\newcommand{\dlitemcw}[2]{\begin{tabular}{ p{\DLtw} p{\DLdw} } \tt{#1} & #2 \end{tabular}\\[5pt] } 
+\newcommand{\dlend}{\vspace{12pt} }

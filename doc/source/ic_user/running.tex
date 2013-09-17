@@ -1,0 +1,189 @@
+\section{Running Orchestrator}
+The \verb!orchestrator! command, located in the bin directory under the source that was fetched from github, 
+is used to start and stop an inception cloud. 
+The inception cloud environment consists of at least 4 Inception Control VMs (ICVMs)  in the environment:
+
+%&indent
+\begin{itemize}
+\item A gateway machine that will be given a public IP address and function much in the same way as the 
+boot-up VM being used to start the cloud. 
+
+\item A controller machine used to run the OpenStack software and to provide the OpenStack Dashboard interface. 
+
+\item A chef machine used to manage Chef installation and configuration scripts. 
+
+\item One or more worker machines used to host the inception virtual machines (iVMs). 
+\end{itemize}
+
+\noindent
+The following sections describe how orchestrator is used. 
+
+\begin{figure}
+  \centering
+  \includegraphics[width=\linewidth]{start_overview.eps}
+  \tiny
+  \caption{\small The environment, after orchestrator has created ICVMs, showing the communication path between orchestrator and the ICVMs.
+    \label{fg_overview} \normalsize
+  }
+  \normalsize
+\end{figure}
+
+\subsection{Starting The Inception Cloud}
+The \verb!orchestrator! command is located in the \verb!bin! directory within the source cloned from github. 
+The bin directory can be added to the path, or the command can be executed with a fully qualified path.  
+It will probably be necessary to add the top level inception directory to the \verb!PYTHONPATH! environment variable
+if inception was not installed. 
+%.sp
+Using the \verb!--help! option will cause all of the possible command line options to be written to the tty device. 
+For the most part, at least for the first time user, only a few are needed and are described below. 
+
+\dlbeg{0.85in}
+\dlitem{-p prefix}{ 
+	This command line flag is required and supplies the prefix string that is used when defining the ICVM names. 
+}
+
+\vspace{5pt}
+\dlitem{-n n}{ 
+	Specifies the number of work ICVMs that are created.  The iVMs which are created in the inception cloud are hosted 
+	on the work VMs thus the number needed is directly related to the number of iVMs that will be created in the inception cloud. 
+}
+
+\vspace{5pt}
+\dlitem{-~-image=}{ 
+	Supplied the image name to be used for all ICVMs.  If not supplied a base image of Ubuntu 12.04 (64 bit) is 
+	created and used for each ICVM. 
+}
+
+\vspace{5pt}
+\dlitem{-~-ssh\_keyfile=}{ 
+	Provides the name of the private key that is to be injected as the user key for each of the 
+	control VMs that are created.
+}
+
+\vspace{5pt}
+\dlitem{-~-user=}{ 
+	The user name created on each node with sudo capabilities. If not given, ubuntu is used. 
+}
+\dlend
+
+\noindent
+The following illustrates the command to start an inception cloud with one worker and a prefix of \verb!scooter0.!
+
+\small\begin{verbatim}
+   orchestrator  -n 1 -p scooter0 \
+       --ssh_keyfile=$HOME/.vmkeys/agave.shared.pk
+\end{verbatim}\normalsize
+\noindent
+The creation and initialisation of the ICVMs takes about 20 minutes during which time a fair few messages
+are written to standard error. 
+When orchestrator has finished, a set of messages should be written to stdout indicating success and which give the IP 
+addresses and URLs for various things in the newly created environment.  
+The following is a sample of these messages (date, time, and system indentification information has bee excluded for brevity):
+
+\small\begin{verbatim}
+   Your inception cloud 'scooter0' is ready!!!
+   Gateway IP is 135.207.223.158
+   Chef server WebUI is http://192.168.254.28:4040
+   OpenStack dashboard is https://192.168.254.29
+\end{verbatim}\normalsize
+
+\subsection{Stopping The Inception Cloud}
+The inception cloud can be stopped manually by halting all of the ICVMs, or orchestrator can be used
+giving it the \verb!--cleanup! command line flag which causes it to terminate all of the ICVMs.
+
+\small\begin{verbatim}
+   orchestrator  -p scooter0  --cleanup 
+\end{verbatim}\normalsize
+
+\subsection{Finalisation}
+It will take approximately 20 minutes for orchestrator to start the inception cloud.
+Once orchestrator reports that the inception cloud is ready, a small amount of housekeeping should be done. 
+These tasks include:
+
+\begin{itemize}
+\item Determining the network addresses of the gateway ICVM.
+
+\item Repointing sshuttle to use the gateway ICVM and to reference the ICVM control network
+
+\item Stopping the boot-up VM
+
+\item Adding the controller to /etc/hosts
+
+\item Creating credentials for your inception cloud
+\end{itemize}
+
+\subsubsection{Repointing Sshuttle}
+Once the ICVMs are running, sshuttle should be "pointed" at the gateway ICVM so that the boot-up VM can be stopped. 
+Sshuttle must also be set to tunnel requests for the private control network that is used by the 
+ICVMs as this is the network on which the nova authorisation and dashboard processes listen on. 
+The following commands illustrate how this can be done:  
+
+\small\begin{verbatim}
+   nova list | grep scooter0-gateway          
+   ssh ubuntu@yyy.yyy.yyy.yyy ifconfig eth1   
+   sshuttle -e ssh -A -i ~/.vmkeys/agave.shared.pk -v \
+            -r ubuntu@yyy.yyy.yyy.yyy  \
+            192.168.254.0/24 zzz.zzz.zzz.0/24
+
+\end{verbatim}\normalsize
+\noindent
+Where:
+
+\dlbeg{0.9in}
+\dlitem{scooter0}{ Is the prefix that was given to orchestrator when the inception cloud was started.}
+
+\vspace{5pt}
+\dlitem{yyy.yyy.yyy.yyy}{ Is the public IP address for the gateway.}
+
+\vspace{5pt}
+\dlitem{zzz.zzz.zzz.0} { 
+	Is the network address of the control network. The netmask also must be checked to determine if /24 is 
+	the appropriate number of bits being used to represent a host id; if not it must be changed to match the netmask.  
+}
+
+\vspace{5pt}
+\dlitem{ubuntu}{ Is the user name that was injected onto each of the ICVMs. }
+\dlend
+
+After these commands are executed sshuttle will again be running on the workstation and managing a tunnel between the 
+workstation and both the virtual network and the inception cloud's private control network in the OpenStack environment. 
+
+\subsubsection{Modifying /etc/hosts}
+In order to use the inception cloud OpenStack dashboard (URL given in the last set of messages generated by orchestrator),
+the workstation must be able to resolve the 
+controller host name (e.g. \verb!scooter0-controller! using the earlier example prefix).  
+The easiest way to do this is to have sshuttle forward all DNS requests to the inception cloud environment for resolution. 
+This is done with the addition of a command line flag on the sshuttle command, however shuffling all of the workstation's DNS
+traffic into the VM environment is probably not a very wise choice. 
+Instead, the host name of the controller, and it's control network IP address (zzz.zzz.zzz.hhh) should be added to the 
+\verb!/etc/hosts! file on the workstation.   
+
+
+\subsubsection{Setting Credentials}
+Credentials must be set in the environment to allow nova to be used on the workstation to control the iVMs in the 
+inception cloud.  
+The following is a list of variables that must be exported and their approximate values (the IP address supplied for the 
+authorisation URL will be different as might the username).  
+The password was given to the user \emph{demo} via the dashboard using the \emph{admin} user ID.
+
+\small\begin{verbatim}
+  export OS_AUTH_URL=http://10.251.0.3:5000/v2.0/
+  export OS_TENANT_NAME="demo"
+  export OS_USERNAME=demo
+  export OS_PASSWORD=demo
+\end{verbatim}\normalsize
+
+The network address given is that of the private control network. 
+The dashboard can be used to setup any users and\/or projects (tenants) that are needed in the inception cloud. 
+The admin user ID and password are admin/admin by default. 
+
+\begin{figure}
+  \centering
+  \includegraphics[width=\linewidth]{inception_final.eps}
+  \caption{
+	\small The virtual environment after cleanup showing path of browser traffic with the dashboard.
+  	\label{fg_final}\normalsize
+  }
+  \normalsize
+\end{figure}
+Following housekeeping, the environment should be as shown in figure \ref{fg_final}.
