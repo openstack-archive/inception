@@ -243,9 +243,12 @@ class Orchestrator(object):
         self._worker_names = []
         self._gateway_floating_ip = None
 
-    def start(self):
+    def start(self, re_raise=False):
         """
         run the whole process
+
+        @param re_raise: whether re-raise caught exception, for the purpose of
+            notifying external caller. Default: False
         """
         try:
             self._check_existence()
@@ -269,6 +272,8 @@ class Orchestrator(object):
                 LOGGER.info("Although there was error in creating your "
                             "inception cloud '%s', resources have been "
                             "successfully cleaned up", self.prefix)
+            if re_raise:
+                raise
 
     def _check_existence(self):
         """
@@ -539,9 +544,12 @@ class Orchestrator(object):
         self._add_run_list(self._worker_names, "role[os-worker-combined]")
         self._run_chef_client(self._worker_ips)
 
-    def cleanup(self):
+    def cleanup(self, re_raise=False):
         """
         Clean up the whole inception cloud, based on self.prefix
+
+        @param re_raise: whether re-raise caught exception, for the purpose of
+            notifying external caller. Default: False
         """
         LOGGER.info("Let's clean up inception cloud '%s'...", self.prefix)
         ## find out servers info
@@ -568,6 +576,8 @@ class Orchestrator(object):
                     self.client.floating_ips.delete(floating_ip)
         except Exception:
             LOGGER.exception("Error in disassociating/releasing floating IP")
+            if re_raise:
+                raise
         ## try deleting each server
         for server in servers:
             try:
@@ -575,5 +585,7 @@ class Orchestrator(object):
                 server.delete()
             except Exception:
                 LOGGER.exception("Error in deleting server %s", server)
+                if re_raise:
+                    raise
                 continue
         LOGGER.info("Inception cloud '%s' has been cleaned up.", self.prefix)
