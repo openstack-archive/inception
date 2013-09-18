@@ -18,6 +18,9 @@ env = openout_any=a openin_any=a
 %.dvi : %.tex
 	$(env) latex -halt-on-error -interaction=nonstopmode -output-format=dvi $<
 
-# xfig used to produce/maintain figures. this converts to eps
+# xfig used to produce/maintain figures. These convert to usable formats.
 %.eps: %.fig
 	fig2dev -L eps <$< >$@
+
+%.pdf: %.fig
+	fig2dev -L pdf <$< >$@

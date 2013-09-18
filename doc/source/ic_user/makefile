@@ -21,12 +21,12 @@ promote::	$(build_list)
 		cp $$f ../;\
 	done
 
-ic_user.pdf:: ic_user.tex $(sec_list:%=%.tex) $(fig_list:%=%.eps)
+ic_user.pdf:: ic_user.tex $(sec_list:%=%.tex) $(fig_list:%=%.pdf)
 
 # everything except final doc files
 clean:
-	rm -f  *converted-to.pdf *.eps *.aux *.log || true
+	rm -f  $(fig_list:%=%.pdf)  *.eps *.aux *.log || true
 
 # everything except the source
 nuke:
-	rm -f $(build_list) *converted-to.pdf *.eps *.aux *.log || true
+	rm -f $(build_list) $(fig_list:%=%.pdf)  *.eps *.aux *.log || true
