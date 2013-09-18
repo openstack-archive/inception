@@ -20,4 +20,13 @@ setup(
         "python-novaclient>=2.13.0",
         "IPython>=0.13.2",
     ],
+    data_files=[('bin', ['bin/configure_knife.sh',
+                        'bin/install_chefserver.sh',
+                        'bin/pre_install_chefserver.sh',
+                        'bin/pre_install_ovs.sh',
+                        'bin/pre_switch_kernel.sh',
+                        'bin/setup_chef_repo.sh',
+                        'bin/userdata.sh.template',
+                       ])],
+    scripts=['bin/orchestrator'],
 )
