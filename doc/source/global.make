@@ -1,6 +1,13 @@
 # global things needed by all make files -- mostly meta rules
 
-SHELL = ksh
+# allow user to override with better shell when desired. 
+# unfortunately (g)make overrides SHELL rather than importing it; pull from MK_SHELL if set
+ifneq ($(MK_SHELL),)
+    SHELL := $(MK_SHELL)
+else
+	SHELL := sh
+endif
+
 
 # allows the use of ../ in include statements
 env = openout_any=a openin_any=a
@@ -14,4 +21,3 @@ env = openout_any=a openin_any=a
 # xfig used to produce/maintain figures. this converts to eps
 %.eps: %.fig
 	fig2dev -L eps <$< >$@
-

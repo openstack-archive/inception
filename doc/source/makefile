@@ -1,6 +1,8 @@
 # simple makefile to build all doc from the subdirectories below and to 
 # pull the final pdf files to this directory.
 
+include global.make
+
 sub_dirs = ic_user
 
 # buld and prompte the final pdf to this directory
