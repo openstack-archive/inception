@@ -2,11 +2,11 @@
 
 user = ubuntu
 
-image = f3d62d5b-a76b-4997-a579-ff946a606132
+image = u1204-130621-gv
 
-flavor = 3
+flavor = m1.medium
 
-gateway_flavor = 1
+gateway_flavor = m1.tiny
 
 key_name = shared
 
