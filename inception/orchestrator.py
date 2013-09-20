@@ -87,17 +87,17 @@ orchestrator_opts = [
                default='ubuntu',
                help='login id with sudo for all nodes'),
     cfg.StrOpt('image',
-               default='f3d62d5b-a76b-4997-a579-ff946a606132',
-               help='id of image used to construct nodes (=u1204-130621-gv)'),
+               default='u1204-130621-gv',
+               help='name of image used to construct nodes'),
     cfg.StrOpt('chefserver_image',
-               default='8848d4cd-1bdf-4627-ae31-ce9bf61440a4',
-               help='id of image to construct chefserver (=u1204-130716-gvc)'),
+               default='u1204-130716-gvc',
+               help='name of image to construct chefserver'),
     cfg.IntOpt('flavor',
-               default=3,
-               help='id of machine flavor used for nodes (3=medium)'),
+               default='m1.medium',
+               help='name of instance flavor used for nodes'),
     cfg.IntOpt('gateway_flavor',
-               default=1,
-               help='id of machine flavor used to construct GW (1=tiny)'),
+               default='m1.tiny',
+               help='name of instance flavor used to construct gateway node'),
     cfg.StrOpt('key_name',
                default='shared',
                help='name of public key for node access via ssh'),
@@ -289,11 +289,37 @@ class Orchestrator(object):
         start all VM servers: gateway, chefserver, controller, and workers, via
         calling Nova client API
         """
+        # map image name to ID
+        image_id = None
+        chefserver_image_id = None
+        for image in self.client.images.list():
+            if image.name == self.image:
+                image_id = image.id
+            if image.name == self.chefserver_image:
+                chefserver_image_id = image.id
+        if image_id is None:
+            raise ValueError('Not found image=%s' % self.image)
+        if chefserver_image_id is None:
+            raise ValueError('Not found image=%s' % self.chefserver_image)
+
+        # map flavor name to ID
+        flavor_id = None
+        gateway_flavor_id = None
+        for flavor in self.client.flavors.list():
+            if flavor.name == self.flavor:
+                flavor_id = flavor.id
+            if flavor.name == self.gateway_flavor:
+                gateway_flavor_id = flavor.id
+        if flavor_id is None:
+            raise ValueError('Not found flavor=%s' % self.flavor)
+        if gateway_flavor_id is None:
+            raise ValueError('Not found flavor=%s' % self.gateway_flavor)
+
         # launch gateway
         gateway = self.client.servers.create(
             name=self.prefix + CONCAT_CHAR + 'gateway',
-            image=self.image,
-            flavor=self.gateway_flavor,
+            image=image_id,
+            flavor=gateway_flavor_id,
             key_name=self.key_name,
             security_groups=self.security_groups,
             userdata=self.userdata)
@@ -303,8 +329,8 @@ class Orchestrator(object):
         # launch chefserver
         chefserver = self.client.servers.create(
             name=self.prefix + CONCAT_CHAR + 'chefserver',
-            image=self.chefserver_image,
-            flavor=self.flavor,
+            image=chefserver_image_id,
+            flavor=flavor_id,
             key_name=self.key_name,
             security_groups=self.security_groups,
             userdata=self.userdata,
@@ -315,8 +341,8 @@ class Orchestrator(object):
         # launch controller
         controller = self.client.servers.create(
             name=self.prefix + CONCAT_CHAR + 'controller',
-            image=self.image,
-            flavor=self.flavor,
+            image=image_id,
+            flavor=flavor_id,
             key_name=self.key_name,
             security_groups=self.security_groups,
             userdata=self.userdata)
@@ -327,8 +353,8 @@ class Orchestrator(object):
         for i in xrange(self.num_workers):
             worker = self.client.servers.create(
                 name=self.prefix + CONCAT_CHAR + 'worker%s' % (i + 1),
-                image=self.image,
-                flavor=self.flavor,
+                image=image_id,
+                flavor=flavor_id,
                 key_name=self.key_name,
                 security_groups=self.security_groups,
                 userdata=self.userdata)
