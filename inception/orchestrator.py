@@ -48,7 +48,7 @@ from oslo.config import cfg
 from inception.utils import cmd
 from inception.utils import wrapper
 
-LOGGER = logging.getLogger(__name__)
+LOG = logging.getLogger(__name__)
 
 orchestrator_opts = [
     cfg.StrOpt('prefix',
@@ -259,17 +259,17 @@ class Orchestrator(object):
             self._deploy_dnsmasq()
             self._setup_controller()
             self._setup_workers()
-            LOGGER.info("Your inception cloud '%s' is ready!!!", self.prefix)
-            LOGGER.info("Gateway IP is %s", self._gateway_floating_ip.ip)
-            LOGGER.info("Chef server WebUI is http://%s:4040",
+            LOG.info("Your inception cloud '%s' is ready!!!", self.prefix)
+            LOG.info("Gateway IP is %s", self._gateway_floating_ip.ip)
+            LOG.info("Chef server WebUI is http://%s:4040",
                         self._chefserver_ip)
-            LOGGER.info("OpenStack dashboard is https://%s",
+            LOG.info("OpenStack dashboard is https://%s",
                         self._controller_ip)
         except Exception:
-            LOGGER.exception("Error in launching inception cloud")
+            LOG.exception("Error in launching inception cloud")
             if self.atomic:
                 self.cleanup()
-                LOGGER.info("Although there was error in creating your "
+                LOG.info("Although there was error in creating your "
                             "inception cloud '%s', resources have been "
                             "successfully cleaned up", self.prefix)
             if re_raise:
@@ -324,7 +324,7 @@ class Orchestrator(object):
             security_groups=self.security_groups,
             userdata=self.userdata)
         self._gateway_id = gateway.id
-        LOGGER.info("Creating %s", gateway)
+        LOG.info("Creating %s", gateway)
 
         # launch chefserver
         chefserver = self.client.servers.create(
@@ -336,7 +336,7 @@ class Orchestrator(object):
             userdata=self.userdata,
             files=self.chefserver_files)
         self._chefserver_id = chefserver.id
-        LOGGER.info("Creating %s", chefserver)
+        LOG.info("Creating %s", chefserver)
 
         # launch controller
         controller = self.client.servers.create(
@@ -347,7 +347,7 @@ class Orchestrator(object):
             security_groups=self.security_groups,
             userdata=self.userdata)
         self._controller_id = controller.id
-        LOGGER.info("Creating %s", controller)
+        LOG.info("Creating %s", controller)
 
         # launch workers
         for i in xrange(self.num_workers):
@@ -359,9 +359,9 @@ class Orchestrator(object):
                 security_groups=self.security_groups,
                 userdata=self.userdata)
             self._worker_ids.append(worker.id)
-            LOGGER.info("Creating %s", worker)
+            LOG.info("Creating %s", worker)
 
-        LOGGER.info('wait at most %s seconds for servers to be ready'
+        LOG.info('wait at most %s seconds for servers to be ready'
                     ' (ssh-able + userdata done)', self.timeout)
         servers_ready = False
         begin_time = time.time()
@@ -392,7 +392,7 @@ class Orchestrator(object):
                 servers_ready = True
                 break
             except (UnboundLocalError, subprocess.CalledProcessError) as error:
-                LOGGER.info('servers are not all ready, error=%s,'
+                LOG.info('servers are not all ready, error=%s,'
                             ' sleep %s seconds', error, self.poll_interval)
                 time.sleep(self.poll_interval)
                 continue
@@ -403,7 +403,7 @@ class Orchestrator(object):
         floating_ip = self.client.floating_ips.create(pool=self.pool)
         self.client.servers.add_floating_ip(self._gateway_id, floating_ip)
         self._gateway_floating_ip = floating_ip
-        LOGGER.info("Creating and associating %s", floating_ip)
+        LOG.info("Creating and associating %s", floating_ip)
 
     def _get_server_info(self, _id):
         """
@@ -549,7 +549,7 @@ class Orchestrator(object):
             got_exception = not exception_queue.empty()
             while not exception_queue.empty():
                 thread_name, func_info, exc = exception_queue.get()
-                LOGGER.error('%s %s %s', thread_name, func_info, exc)
+                LOG.error('%s %s %s', thread_name, func_info, exc)
             if got_exception:
                 raise RuntimeError("One or more subthreads got exception")
 
@@ -577,7 +577,7 @@ class Orchestrator(object):
         @param re_raise: whether re-raise caught exception, for the purpose of
             notifying external caller. Default: False
         """
-        LOGGER.info("Let's clean up inception cloud '%s'...", self.prefix)
+        LOG.info("Let's clean up inception cloud '%s'...", self.prefix)
         ## find out servers info
         servers = []
         gateway = None
@@ -596,22 +596,22 @@ class Orchestrator(object):
         try:
             for floating_ip in self.client.floating_ips.list():
                 if floating_ip.ip == gateway_ip:
-                    LOGGER.info("Disassociating and releasing %s", floating_ip)
+                    LOG.info("Disassociating and releasing %s", floating_ip)
                     self.client.servers.remove_floating_ip(gateway,
                                                            floating_ip)
                     self.client.floating_ips.delete(floating_ip)
         except Exception:
-            LOGGER.exception("Error in disassociating/releasing floating IP")
+            LOG.exception("Error in disassociating/releasing floating IP")
             if re_raise:
                 raise
         ## try deleting each server
         for server in servers:
             try:
-                LOGGER.info('Deleting %s', server)
+                LOG.info('Deleting %s', server)
                 server.delete()
             except Exception:
-                LOGGER.exception("Error in deleting server %s", server)
+                LOG.exception("Error in deleting server %s", server)
                 if re_raise:
                     raise
                 continue
-        LOGGER.info("Inception cloud '%s' has been cleaned up.", self.prefix)
+        LOG.info("Inception cloud '%s' has been cleaned up.", self.prefix)

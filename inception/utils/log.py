@@ -55,14 +55,14 @@ LOG_LEVELS = {
 
 def setup(product_name):
     """setup logger and its handlers"""
-    LOGGER = logging.getLogger(product_name)
+    LOG = logging.getLogger(product_name)
     log_level = LOG_LEVELS[CONF.log_level]
-    LOGGER.setLevel(log_level)
+    LOG.setLevel(log_level)
     ## console logging
     console_handler = logging.StreamHandler()
     console_handler.setLevel(log_level)
     console_handler.setFormatter(CONF.log_formatter)
-    LOGGER.addHandler(console_handler)
+    LOG.addHandler(console_handler)
     ## file logging
     if CONF.log_dir is not None and CONF.log_file is not None:
         if not os.path.exists(CONF.log_dir):
@@ -71,4 +71,4 @@ def setup(product_name):
                                                         CONF.log_file))
         file_handler.setLevel(log_level)
         file_handler.setFormatter(CONF.log_formatter)
-        LOGGER.addHandler(file_handler)
+        LOG.addHandler(file_handler)
