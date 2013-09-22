@@ -23,7 +23,7 @@ import logging
 import threading
 import traceback
 
-LOGGER = logging.getLogger(__name__)
+LOG = logging.getLogger(__name__)
 
 
 class FuncThread(threading.Thread):
@@ -46,5 +46,5 @@ class FuncThread(threading.Thread):
             func_info = (str(self._func.func) + " " + str(self._func.args) +
                          " " + str(self._func.keywords))
             info = (self.name, func_info, traceback.format_exc())
-            LOGGER.info(info)
+            LOG.info(info)
             self._exception_queue.put(info)
