@@ -35,7 +35,8 @@ It will probably be necessary to add the top level inception directory to the \v
 if inception was not installed. 
 %.sp
 Using the \verb!--help! option will cause all of the possible command line options to be written to the tty device. 
-For the most part, at least for the first time user, only a few are needed and are described below. 
+For the most part, at least for the first time user, only a few are needed and are described 
+below\footnote{A complete list of orchestrator command line options are presented in an appendix}. 
 
 \dlbeg{0.85in}
 \dlitem{-p prefix}{ 
@@ -50,8 +51,7 @@ For the most part, at least for the first time user, only a few are needed and a
 
 \vspace{5pt}
 \dlitem{-~-image=}{ 
-	Supplied the image name to be used for all ICVMs.  If not supplied a base image of Ubuntu 12.04 (64 bit) is 
-	created and used for each ICVM. 
+	Supplied the image name to be used for all ICVMs.  If not supplied the name u1204-130621-gv is used for each ICVM. 
 }
 
 \vspace{5pt}
@@ -78,7 +78,7 @@ The creation and initialisation of the ICVMs takes about 20 minutes during which
 are written to standard error. 
 When orchestrator has finished, a set of messages should be written to stdout indicating success and which give the IP 
 addresses and URLs for various things in the newly created environment.  
-The following is a sample of these messages (date, time, and system indentification information has bee excluded for brevity):
+The following is a sample of these messages (date, time, and system identification information has bee excluded for brevity):
 
 \small\begin{verbatim}
    Your inception cloud 'scooter0' is ready!!!
