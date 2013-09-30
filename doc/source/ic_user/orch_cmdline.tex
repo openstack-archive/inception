@@ -1,0 +1,127 @@
+% command line options appendix
+
+\section{Orchestrator Options}
+The following is a complete list of the command line options supported by \verb!orchestrator.!
+
+\dlbeg{1.65in}
+\dlitemcw{--atomic}{
+	When supplied causes an automatic roll back (delete all virtual resources) when an error during
+	startup is encountered.
+}
+
+\vspace{5pt}
+\dlitemcw{--chef\_repo=URL}{
+	Supplies the URL of the Chef git repository. If not supplied 'git://github.com/att/inception-chef-repo.git' is used.
+}
+
+\vspace{5pt}
+\dlitemcw{--chef\_repo\_branch=name}{
+	Lists the branch name within the Chef git repository to use when fetching Chef.  If not supplied 'master' is used.
+}
+
+\vspace{5pt}
+\dlitemcw{--chef\_server\_image=name}{
+	Supplies the name of the OS virtual machine image that should be used when creating the Chef server ICVM.
+	As a default, 'u1204-130716-gvc' is used.
+}
+
+\vspace{5pt}
+\dlitemcw{--dst\_dir=name}{
+	The absolute path of the directory where Chef related setup scripts are to be placed on the ICVMs.
+	When not defined, /home/ubuntu is used.
+}
+
+\vspace{5pt}
+\dlitemcw{--flavor=name}{
+	Indicates the name of the VM flavour that will be used for ICVMs. If not supplied the model m1.tiny is used.
+}
+
+\vspace{5pt}
+\dlitemcw{--gateway\_flavor=name}{
+	Indicates the name of the VM flavour that will be used for the gateway ICVMs. If not supplied the model m1.tiny is used.
+}
+
+\vspace{5pt}
+\dlitemcw{--image=name}{
+	Supplied the image name to be used for all ICVMs.  If not supplied the name u1204-130621-gv is used for each ICVM.
+}
+
+\vspace{5pt}
+\dlitemcw{--ssh\_keyfile=path}{
+	Provides the path to the private key that is to be injected as the user key for each of the
+	control VMs that are created.
+}
+
+\vspace{5pt}
+\dlitemcw{--key\_name=name}{
+	Supplies  the name of the key file that is to be used for ssh access to the ICVMs. If not supplied the
+	name 'shared' is used.
+
+}
+
+\dlitemcw{-p name
+
+--prefix=name}{
+	This command line flag is required and supplies the prefix string that is used when defining the ICVM names.
+	(The name given may not contain hyphens.)
+}
+
+\vspace{5pt}
+\dlitemcw{--parallel}{
+	Causes Chef related setup tasks to be executed in parallel.
+}
+
+\vspace{5pt}
+\dlitemcw{--poll\_interval=n}{
+	Specifies the number of seconds between retries when testing for the state and stability of the ICVMs.
+	When not supplied, 5 seconds is used.
+}
+
+\vspace{5pt}
+\dlitemcw{-n n
+
+--num\_workers=n} {
+	Specifies the number of work ICVMs that are created.  The iVMs which are created in the inception cloud are hosted
+	on the work VMs thus the number needed is directly related to the number of iVMs that will be created in the inception cloud.
+}
+
+\vspace{5pt}
+\dlitemcw{--pool=name}{
+	Defines the name of the pool from which floating IP addresses will be taken. If not supplied the
+	name 'research' is used.
+}
+
+\vspace{5pt}
+\dlitemcw{--sdn}{
+	When supplied causes an SDN/OpenFlow and full-mesh network topology to be used. If not supplied
+	a conventional L2/L3 star topology is used.
+}
+
+\vspace{5pt}
+\dlitemcw{--security\_groups=list}{
+	Supplies a comma separated list of security group names (already known to the hosting VM environment)
+	that are to be assigned to each ICVM created. If not supplied default and ssh are used.
+}
+
+\vspace{5pt}
+\dlitemcw{--src\_dir}{
+	the relative path to the directory containing Chef related setup scripts on the current host.
+	If not supplied ../bin is assumed.
+}
+
+\vspace{5pt}
+\dlitemcw{--user=name}{
+	The user name created on each node with sudo capabilities. If not given, ubuntu is used.
+}
+
+\vspace{5pt}
+\dlitemcw{--user\_data=string}{
+	Provides a bash script that is run by cloud-init during the boot stage (late).
+}
+
+\vspace{5pt}
+\dlitemcw{--timeout=n}{
+	Sets the number of seconds, default unlimited (nearly), to wait for all ICVMs to become ready.
+}
+\dlend
+

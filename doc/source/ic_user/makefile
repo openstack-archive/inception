@@ -9,7 +9,7 @@
 include ../global.make	# meta stuff
 
 fig_list = inception_final start_overview inception_planes
-sec_list = overview prep running using examples
+sec_list = overview prep running using examples orch_cmdline
 
 
 build_list = ic_user.pdf
