@@ -1,0 +1,8 @@
+Verified+2: Jenkins
+Approved+1: Changbin Liu <changbin.liu@gmail.com>
+Code-Review+2: Changbin Liu <changbin.liu@gmail.com>
+Submitted-by: Jenkins
+Submitted-at: Mon, 14 Oct 2013 20:32:20 +0000
+Reviewed-on: https://review.openstack.org/48927
+Project: stackforge/inception
+Branch: refs/heads/master
