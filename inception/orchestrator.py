@@ -39,6 +39,7 @@ import functools
 import logging
 import os
 import Queue
+import re
 import subprocess
 import time
 
@@ -229,6 +230,12 @@ class Orchestrator(object):
                              os.environ['OS_PASSWORD'],
                              os.environ['OS_TENANT_NAME'],
                              os.environ['OS_AUTH_URL'])
+
+        # If the password offered is actually a 32 byte hex digit string
+        # then it's probably a token
+        if re.match('\A[\da-fA-F]{32}\Z', os.environ['OS_PASSWORD']):
+            self.client.client.auth_token = os.environ['OS_PASSWORD']
+
         self._gateway_id = None
         self._gateway_ip = None
         self._gateway_name = None
