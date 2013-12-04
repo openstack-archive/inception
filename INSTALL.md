@@ -23,3 +23,23 @@ security to operate in a production environment.
 
         $ paster serve ./etc/inception/paste-config.ini
 
+Web UI
+------
+
+1. Install the inception package as usual.
+
+2. Locate and modify Horizon's openstack_dashboard/settings.py to include 'inception.webui' 
+   in the INSTALLED_APPS tuple.
+
+   E.g.
+
+    INSTALLED_APPS = (
+        'openstack_dashboard',
+        'django.contrib.contenttypes',
+        'django.contrib.auth',
+        . . .
+        'inception.webui',
+        . . .
+    )
+
+3. Restart the Horizon service.
