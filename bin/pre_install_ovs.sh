@@ -1,17 +1,19 @@
 #!/bin/bash
 
-## Install Open vSwitch. This file is translated from
-## cookbook/openvswitch/recipes/default.
+## Install Open vSwitch (2.0.0). This file is translated from
+## cookbook/openvswitch/recipes/default
 
 # dependencies
 sudo apt-get -y install build-essential \
     git \
     autoconf \
+    python-dev \
     python-simplejson \
     python-qt4 \
     python-twisted-conch \
     uml-utilities \
     libtool \
+    libssl-dev \
     pkg-config
 
 sudo mkdir -p /opt/openvswitch
@@ -20,20 +22,22 @@ sudo chown root:root /opt/openvswitch
 
 sudo mkdir -p /etc/openvswitch
 sudo chmod 00755 /etc/openvswitch
-sudo chown root:root /opt/openvswitch
+sudo chown root:root /etc/openvswitch
 
 sudo chmod a+w /opt/openvswitch
 cd /opt/openvswitch
-git clone git://openvswitch.org/openvswitch
+wget http://openvswitch.org/releases/openvswitch-2.0.0.tar.gz
+tar xzvf openvswitch-2.0.0.tar.gz
+mv openvswitch-2.0.0 openvswitch
 cd openvswitch
-git checkout 3b6f2889400fd340b851c2d36356457559ae6e81
-./boot.sh
 ./configure --with-linux=/lib/modules/`uname -r`/build \
     --prefix=/usr --localstatedir=/var # default to these libraries
 make -j
 sudo make install
+sudo make modules_install
 sudo ovsdb-tool create /etc/openvswitch/conf.db \
     vswitchd/vswitch.ovsschema
+sudo /usr/bin/ovs-vsctl --no-wait init
 
 echo "start on (filesystem and net-device-up)
 stop on runlevel [016]
@@ -45,17 +49,19 @@ respawn
 expect fork
 
 pre-start script
-  /sbin/insmod /opt/openvswitch/openvswitch/datapath/linux/openvswitch.ko
+  /sbin/modprobe openvswitch
+  /sbin/modprobe gre
   mkdir -p /var/run/openvswitch/
 end script
 
 script
   exec /usr/sbin/ovsdb-server /etc/openvswitch/conf.db \\
         --remote=punix:/var/run/openvswitch/db.sock \\
-        --remote=db:Open_vSwitch,manager_options \\
-        --private-key=db:SSL,private_key \\
-        --certificate=db:SSL,certificate \\
-        --bootstrap-ca-cert=db:SSL,ca_cert --pidfile --detach --log-file
+        --remote=db:Open_vSwitch,Open_vSwitch,manager_options \\
+        --private-key=db:Open_vSwitch,SSL,private_key \\
+        --certificate=db:Open_vSwitch,SSL,certificate \\
+        --bootstrap-ca-cert=db:Open_vSwitch,SSL,ca_cert \\
+        --pidfile --detach
 end script
 
 # seems main script only allows one daemon, so we move another
@@ -73,5 +79,6 @@ post-stop script
 end script
 " | sudo tee /etc/init/openvswitch.conf
 sudo chmod 00755 /etc/init/openvswitch.conf
-sudo chown root:root /opt/openvswitch
+sudo chown root:root /etc/init/openvswitch.conf
+
 sudo service openvswitch start
