@@ -47,20 +47,3 @@ cd libvirt
 		   # --with-xen=yes to the command
 make -j
 sudo make install
-
-# enable libvirt for VM live migration
-sudo sed -i /etc/libvirt/libvirtd.conf \
-    -e 's/#listen_tls = 0/listen_tls = 0/g' \
-    -e 's/#listen_tcp = 1/listen_tcp = 1/g' \
-    -e 's/#auth_tcp = "sasl"/auth_tcp = "none"/g'
-sudo sed -i /etc/init/libvirt-bin.conf \
-    -e 's/env libvirtd_opts="-d"/env libvirtd_opts="-d -l"/g'
-sudo sed -i /etc/default/libvirt-bin \
-    -e 's/libvirtd_opts="-d"/libvirtd_opts="-d -l"/g'
-
-# restart libvirt
-sudo service libvirt-bin restart
-
-# Remove the default network created by libvirt
-sudo virsh net-destroy default
-sudo virsh net-undefine default
