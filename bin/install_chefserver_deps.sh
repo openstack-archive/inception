@@ -14,7 +14,7 @@ sudo apt-get install -y opscode-keyring # permanent upgradeable keyring
 sudo apt-get install -y debconf-utils
 sudo apt-get -y upgrade
 
-sudo apt-get install -y  libgnumail-java ruby-addressable libextlib-ruby jsvc \
+sudo apt-get install -y libgnumail-java ruby-addressable libextlib-ruby jsvc \
   libdb5.1-java-gcj erlang-eunit libjaxp1.3-java libcommons-pool-java \
   libdb-je-java ruby-mixlib-config gcj-4.6-jre-lib libjson-ruby1.8 \
   libbcel-java erlang-crypto libgeronimo-jta-1.1-spec-java libecj-java \
