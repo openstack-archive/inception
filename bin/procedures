@@ -1,0 +1,126 @@
+(*) Physical machine
+
+# check CPU auto scaling
+grep -E '^model name|^cpu MHz' /proc/cpuinfo
+
+# disable CPU auto scaling if enabled
+for CPUFREQ in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do 
+    [ -f $CPUFREQ ] || continue
+    echo -n performance > $CPUFREQ
+done
+
+sudo sed -i \
+    -e 's/echo -n ondemand > $CPUFREQ/echo -n performance > $CPUFREQ/' \
+    /etc/init.d/ondemand; 
+
+(*) OS image 
+
+# switch_kernel.sh (deprecated)
+
+sudo apt-get -y update && sudo apt-get -y upgrade
+
+(*) Basic software and configuration
+
+sudo apt-get -y install \
+    emacs \
+    htop \
+    iftop \
+    iotop \
+    sysstat \
+    arping \
+    cpu-checker \
+    build-essential \
+    git \
+    python-dev
+
+# enabel IP forwarding
+sudo sed -i 's/#net.ipv4.ip_forward=1/net.ipv4.ip_forward=1/' \
+    /etc/sysctl.conf && sudo sysctl net.ipv4.ip_forward=1
+
+# enable fast ssh login
+sudo sed -i.orig \
+    -e 's/#GSSAPIAuthentication no/GSSAPIAuthentication no\nUseDNS no/' \
+    /etc/ssh/sshd_config && sudo service ssh restart
+
+# shorten failsafe sleep time
+sudo sed -i \
+    -e 's/sleep 20/sleep 1/' \
+    -e 's/sleep 40/sleep 1/' \
+    -e 's/sleep 59/sleep 1/' \
+    /etc/init/failsafe.conf
+
+(*) Chef server (following steps can be done either manually, or via chef-client)
+
+# install_chefserver_deps.sh (skip-able)
+install_chefserver.sh
+configure_knife.sh
+setup_chef_repo.sh
+
+(*) Open vSwitch
+
+# install_openvswitch.sh (deprecated)
+
+sudo apt-get -y install openvswitch-switch
+
+(*) libvirt, kvm
+
+# install_libvirt.sh (deprecated)
+
+sudo apt-get -y install libvirt-bin kvm qemu
+
+sudo virsh net-destroy default
+sudo virsh net-undefine default
+
+# enable libvirt for VM live migration
+sudo sed -i.orig /etc/libvirt/libvirtd.conf \
+    -e 's/#listen_tls = 0/listen_tls = 0/g' \
+    -e 's/#listen_tcp = 1/listen_tcp = 1/g' \
+    -e 's/#auth_tcp = "sasl"/auth_tcp = "none"/g'
+sudo sed -i.orig /etc/init/libvirt-bin.conf \
+    -e 's/env libvirtd_opts="-d"/env libvirtd_opts="-d -l"/g'
+sudo sed -i.orig /etc/default/libvirt-bin \
+    -e 's/libvirtd_opts="-d"/libvirtd_opts="-d -l"/g'
+sudo service libvirt-bin restart
+
+# /etc/nova/nova.conf
+# live_migration_flag=VIR_MIGRATE_UNDEFINE_SOURCE,VIR_MIGRATE_PEER2PEER,VIR_MIGRATE_LIVE
+# libvirt_cpu_mode=custom
+# libvirt_cpu_model=kvm64
+
+(*) ZooKeeper
+
+install_zookeeper.sh
+
+(*) docker
+
+sudo apt-get -y install docker.io lxc udhcpc arping
+
+# enable lxc as backend driver
+sudo sed -i     /etc/default/docker.io \
+    -e 's/#DOCKER_OPTS="-dns 8.8.8.8 -dns 8.8.4.4"/DOCKER_OPTS="-e lxc"/'
+sudo service docker.io restart
+
+# download and setup pipework
+wget https://raw.githubusercontent.com/jpetazzo/pipework/master/pipework -P /root/
+sed -i.orig -e 's/docker/docker.io/' /root/pipework
+chmod +x /root/pipework
+
+(*) VXLAN tunnels
+
+ovs-vsctl add-br obr1; ovs-vsctl add-br obr2; ovs-vsctl add-br obr3; ovs-vsctl set Bridge obr1 stp_enable=true; ovs-vsctl set Bridge obr2 stp_enable=true; ovs-vsctl set Bridge obr3 stp_enable=true; ovs-vsctl add-port obr1 eth1p; ovs-vsctl add-port obr2 eth2p; ovs-vsctl add-port obr3 eth3p
+
+prefix_ip=10.255; postfix_ip_1=100; postfix_ip_2=64; for i in 1 2 3; do ovs-vsctl --may-exist add-port obr${i} obr${i}_${postfix_ip_1}_${postfix_ip_2} -- set interface obr${i}_${postfix_ip_1}_${postfix_ip_2} type=vxlan options:remote_ip=${prefix_ip}.${postfix_ip_1}.${postfix_ip_2} options:key=${i}; done
+
+DC=2; prefix_ip=135.207; postfix_ip_1=223; postfix_ip_2=152; for i in 1 2 3; do ovs-vsctl --may-exist add-port obr${i} gateway${i}_${DC} -- set interface gateway${i}_${DC} type=vxlan options:remote_ip=${prefix_ip}.${postfix_ip_1}.${postfix_ip_2} options:key=${i}; done
+
+(*) Ryu WL2 controller
+
+sudo pip install kazoo oslo.config netaddr eventlet webob routes
+
+wget https://github.com/att/ryu.git
+
+(*) Launch guest VMs (or use OpenStack)
+
+launch_libvirt_instance.py
+
+launch_docker_instance.py
