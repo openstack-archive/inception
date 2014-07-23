@@ -1,7 +1,6 @@
 #!/bin/bash
 
-## Switch kernel from virtual to generic, for vanilla Ubuntu 12.04
-## image launched instance.
+## Switch kernel from virtual to generic to use nested virtualization
 
 # routine
 sudo apt-get -y update
