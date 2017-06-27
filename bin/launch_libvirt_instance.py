@@ -2,8 +2,7 @@
 
 import sys
 import os
-import uuid
-
+from oslo_utils import uuidutils
 XML_TEMPLATE = """<domain type='kvm'>
   <name>%s</name>
   <uuid>%s</uuid>
@@ -69,8 +68,8 @@ def int_to_hex(n):
 def gen_libvirt_xml(subnet, begin, end):
     for i in range(begin, end):
         name = "%s.%s" % (subnet, i)
-        xml = XML_TEMPLATE % (name, str(uuid.uuid4()), name,
-                              int_to_hex(subnet), int_to_hex(i))
+        xml = XML_TEMPLATE % (name, uuidutils.generate_uuid(), name,
+        int_to_hex(subnet), int_to_hex(i))
         print xml
         fout = open('/tmp/%s.%s.xml' % (subnet, i), 'w')
         fout.write(xml)
