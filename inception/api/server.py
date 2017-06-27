@@ -26,7 +26,7 @@ import os
 import threading
 import sys
 import traceback
-import uuid
+from oslo_utils import utils
 from wsgiref.simple_server import make_server
 
 from routes import Mapper
@@ -264,7 +264,7 @@ class InceptionCloud(_BASE):
     power_state = Column(String)
 
     def __init__(self):
-        self.id = uuid.uuid4()      # Generate our own IC id
+        self.id = uuidutils.generate_uuid()      # Generate our own IC id
         self.worker_ids = []
 
     def __repr__(self):
