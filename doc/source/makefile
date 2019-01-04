@@ -13,7 +13,7 @@ all::
 		(cd $$d; $(MAKE) && $(MAKE) promote);\
 	done
 
-# scrub everything away execpt source
+# scrub everything away except source
 nuke::
 	for d in $(sub_dirs);\
 	do\
