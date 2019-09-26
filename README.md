@@ -1,11 +1,3 @@
-Inception
-=========
+# This repo has moved to OpenDev
 
-A tool to launch OpenStack-in-OpenStack clouds, to accelerate testing
-and many more.
-
-- More information at https://wiki.openstack.org/wiki/Inception
-
-Join us
-
-- https://launchpad.net/inception
+It can now be found at [https://opendev.org/x/inception](https://opendev.org/x/inception)
